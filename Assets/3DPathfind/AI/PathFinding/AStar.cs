@@ -249,13 +249,19 @@ public class AStar
                 check = false;
 
                 //Curve detect
-                //if(!allowCurve)
-                //{
-                //    if (current.paths[i].collisionTable.ContainsKey(agentSize))
-                //        check = current.paths[i].collisionTable[agentSize];
-                //    else
-                //        current.paths[i].collisionTable.Add(agentSize, check = CheckCurve(current, temp));
-                //}
+                // 대각선으로 장애물 뚫고 가는거 방지 코드
+                if(!allowCurve)
+                {
+                    // 이미 계산된 curve는 해싱해서 저장, 이게 테스트했을 때는 성능적인 면에서 의미있는 효과를 보였는데
+                    // hash 충돌율이 높아졌을 땐 어떻게 될지 잘..ㅎㅎ
+                    // 지금은 비활성 해놓음
+                    // if (current.paths[i].collisionTable.ContainsKey(agentSize))
+                    //     check = current.paths[i].collisionTable[agentSize];
+                    // else
+                    //     current.paths[i].collisionTable.Add(agentSize, check = CheckCurve(current, temp));
+
+                    check = CheckCurve(current, temp);
+                }
 
 
                 if (check) continue;
