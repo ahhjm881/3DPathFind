@@ -27,66 +27,47 @@ namespace Candy.Pathfind3D
         }
     }
 
-    [BurstCompile]
+    [BurstCompile(DisableSafetyChecks = true)]
     public struct OctNodeSetObstacleJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<ColliderHit> Hits;
-        [ReadOnly] public NativeArray<OctNode> Input;
-        
-        [WriteOnly]
-        public NativeArray<OctNode> Output;
+        [ReadOnly] public NativeArray<OctNode> Nodes;
         
         public void Execute(int index)
         {
             if (Hits[index].instanceID != 0)
             {
-                OctNode tempNode = Input[index];
+                OctNode tempNode = Nodes[index];
                 tempNode.IsObstacle = true;
-                Output[index] = tempNode;
+                Nodes[index] = tempNode;
             }
         }
     }
-    
-    [BurstCompile]
-    public struct OctNodeGenerateJob : IJobParallelFor
-    {
-        [WriteOnly] public NativeArray<OctNode> Output;
-        
-        public void Execute(int index)
-        {
-            if (index == 0) return;
-            
-            Output[index] = new OctNode(
-                index, false, 0, 0, false, Vector3.zero
-            );
-        }
-    }
 
-    [BurstCompile]
+    [BurstCompile(DisableSafetyChecks = true)]
     public struct OctNodeDivideJob : IJobParallelFor
     {
-        [WriteOnly]
         public NativeArray<OctNode> WriteOctNodeList;
 
         [ReadOnly] 
         public int CurrentDepth;
         
         [ReadOnly]
-        public NativeArray<OctNode> ReadOctNodeList;
-        
-        [ReadOnly]
         public NativeArray<float3> ChildDirectionVectorArray;
+
+        [ReadOnly] public int Offset;
 
         public void Execute(int index)
         {
+            index += Offset;
             if (index == 0) return;
             int parentIndex = (index - 1) / 8;
 
-            if (ReadOctNodeList[parentIndex].Depth != CurrentDepth - 1)
+            if (WriteOctNodeList[parentIndex].Depth != CurrentDepth - 1)
             {
                 return;
             }
-            if (ReadOctNodeList[parentIndex].IsObstacle is false)
+            if (WriteOctNodeList[parentIndex].IsObstacle is false)
             {
                 OctNode n = new OctNode(
                     0,
@@ -102,7 +83,7 @@ namespace Candy.Pathfind3D
             }
 
 
-            OctNode parentNode = ReadOctNodeList[parentIndex];
+            OctNode parentNode = WriteOctNodeList[parentIndex];
 
             float childScale = parentNode.Scale * 0.5f;
             float3 parentPos = parentNode.WorldPosition;

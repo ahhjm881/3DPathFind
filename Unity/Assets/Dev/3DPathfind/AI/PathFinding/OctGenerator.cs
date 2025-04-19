@@ -15,7 +15,7 @@ public class OctGenerator : MonoBehaviour
 
     [SerializeField] private float scale = 10f;
 
-    [Range(1, 6)]
+    [Range(1, 10)]
     [SerializeField] private int depth = 3;
     [SerializeField] private uint defaultDepth = 0;
     [SerializeField] private string[] layers = { "Default" };
