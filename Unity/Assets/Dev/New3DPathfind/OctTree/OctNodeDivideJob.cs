@@ -16,11 +16,18 @@ namespace Candy.Pathfind3D
         
         public void Execute(int index)
         {
+            OctNode node = Input[index];
+            QueryParameters query = QueryParameters;
+            if (node.IsGenerated is false)
+            {
+                query.layerMask = 0;
+            }
+            
             OverlapBoxCommand command = new OverlapBoxCommand(
-                Input[index].WorldPosition,
-                Input[index].Scale * new float3(1f, 1f, 1f) * 0.5f,
+                node.WorldPosition,
+                node.Scale * new float3(1f, 1f, 1f) * 0.5f,
                 Quaternion.identity,
-                QueryParameters
+                query
             );
 
             Output[index] = command;

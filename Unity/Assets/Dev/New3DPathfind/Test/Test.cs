@@ -7,52 +7,95 @@ namespace Candy.Pathfind3D
 {
     public class Test : MonoBehaviour
     {
+        public Vector3Int Size;
         public bool IsDraw;
 
         [SerializeField] private OctTree.InitParameter _param;
 
-        private OctTree _tree;
+        private OctTree[,,] _trees;
         private void Start()
         {
-            _param.WorldPosition = transform.position;
-            _tree = new OctTree(_param);
-            
+            _trees = new OctTree[Size.x, Size.y, Size.z];
+
             Profiler.BeginSample("Create Space");
-            _tree.CreateSpace();
+            
+            Profiler.BeginSample("Init Physics Buffer");
+            (NativeList<OverlapBoxCommand> overlapBoxCommands, NativeList<ColliderHit> results) = OctTree.CreatePhysicsBuffer(_param);
+            Profiler.EndSample();
+            
+            
+            Profiler.BeginSample("Create");
+            for (int i = 0; i < Size.x; i++)
+            {
+                for (int j = 0; j < Size.y; j++)
+                {
+                    for (int k = 0; k < Size.z; k++)
+                    {
+                        _param.WorldPosition = transform.position + new Vector3(i, j, k) * _param.Scale +
+                                               Vector3.one * _param.Scale * 0.5f;
+                        var tree = new OctTree(_param);
+                        tree.CreateSpace(overlapBoxCommands, results);
+                        _trees[i, j, k] = tree;
+                    }
+                }
+            }
+            Profiler.EndSample();
+            
+            Profiler.BeginSample("Release Physics Buffer");
+            overlapBoxCommands.Dispose();
+            results.Dispose();
+            Profiler.EndSample();
+            
             Profiler.EndSample();
         }
 
         private void OnDestroy()
         {
-            _tree?.Dispose();
+            if (_trees is null) return;
+            
+            for (int i = 0; i < Size.x; i++)
+            {
+                for (int j = 0; j < Size.y; j++)
+                {
+                    for (int k = 0; k < Size.z; k++)
+                    {
+                        _trees[i, j, k].Dispose();
+                    }
+                }
+            }
+
+            _trees = null;
         }
 
         private void OnDrawGizmos()
         {
-            Gizmos.DrawWireCube(transform.position, Vector3.one * _param.Scale);
+            Gizmos.DrawWireCube(transform.position + _param.Scale * (Vector3)Size * 0.5f, _param.Scale * (Vector3)Size);
 
             if (IsDraw is false) return;
-            
-            if (_tree is null) return;
+            if (_trees is null) return;
 
-            NativeList<OctNode> arr;
-            
-            lock (_tree.LockObj)
+            for (int x = 0; x < Size.x; x++)
             {
-                arr = _tree.OctNodes;
-            }
+                for (int y = 0; y < Size.y; y++)
+                {
+                    for (int z = 0; z < Size.z; z++)
+                    {
+                        OctTree tree = _trees[x, y, z];
+                        if (tree.OctNodes.IsCreated is false) return;
 
-            if (arr.IsCreated is false) return;
+                        for (int i = 0; i < tree.OctNodes.Length; i++)
+                        {
+                            OctNode node = tree.OctNodes[i];
+                            if (node.IsGenerated is false) continue;
 
-            for (int i = 0; i < _tree.OctNodes.Length; i++)
-            {
-                OctNode node = _tree.OctNodes[i];
-                if (node.IsGenerated is false) continue;
-
-                Gizmos.color = node.IsObstacle ? Color.yellow : Color.blue;
+                            Gizmos.color = node.IsObstacle ? Color.yellow : Color.blue;
                 
-                Gizmos.DrawWireCube(node.WorldPosition, Vector3.one * node.Scale);
+                            Gizmos.DrawWireCube(node.WorldPosition, Vector3.one * node.Scale);
+                        }
+                    }
+                }
             }
+
         }
     }
 }

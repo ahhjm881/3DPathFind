@@ -35,16 +35,15 @@ namespace Candy.Pathfind3D
         public object LockObj = new();
         public NativeList<OctNode> OctNodes;
 
-        public int MaxOctNodeArrayLength
+        public int MaxOctNodeArrayLength => GetMaxOctNodeArrayLength(Parameter);
+
+        public static int GetMaxOctNodeArrayLength(InitParameter parameter)
         {
-            get
-            {
-                int depth = Mathf.Max(Parameter.MinDepth, Parameter.MaxDepth);
+            int depth = Mathf.Max(parameter.MinDepth, parameter.MaxDepth);
 
-                int size = GetNodeCountOfDepth(depth);
+            int size = GetNodeCountOfDepth(depth);
 
-                return size;
-            }
+            return size;
         }
 
 
@@ -53,7 +52,7 @@ namespace Candy.Pathfind3D
             Parameter = parameter;
         }
 
-        private int GetNodeCountOfDepth(int depth)
+        private static int GetNodeCountOfDepth(int depth)
         {
             int d = 0;
             for (int i = 0; i <= depth; i++)
@@ -64,7 +63,7 @@ namespace Candy.Pathfind3D
             return d;
         }
 
-        private int IntPow8(int x)
+        private static int IntPow8(int x)
         {
             if (x < 0) return 0;
 
@@ -77,12 +76,22 @@ namespace Candy.Pathfind3D
             return d;
         }
 
-        public void CreateSpace()
+        public void CreateSpace(NativeList<OverlapBoxCommand> overlapBoxCommands, NativeList<ColliderHit> results)
         {
-            Divide();
+            Divide(overlapBoxCommands, results);
         }
 
-        public void Divide()
+        public static (NativeList<OverlapBoxCommand> overlapBoxCommands, NativeList<ColliderHit> results) CreatePhysicsBuffer(InitParameter parameter)
+        {
+            Profiler.BeginSample("Physics buffer"); 
+            NativeList<OverlapBoxCommand> commands = new NativeList<OverlapBoxCommand>(GetMaxOctNodeArrayLength(parameter), Allocator.TempJob);
+            NativeList<ColliderHit> results = new NativeList<ColliderHit>(GetMaxOctNodeArrayLength(parameter), Allocator.TempJob);
+            Profiler.EndSample();
+
+            return (commands, results);
+        }
+
+        public void Divide(NativeList<OverlapBoxCommand> commands, NativeList<ColliderHit> results)
         {
             int cpuCount = 32;
 
@@ -91,11 +100,6 @@ namespace Candy.Pathfind3D
             NativeList<OctNode> writeOctNode = new NativeList<OctNode>(MaxOctNodeArrayLength, Allocator.Persistent);
             writeOctNode.Add(new OctNode(0, true, 0, Parameter.Scale, true, Parameter.WorldPosition));
             writeOctNode.ResizeUninitialized(MaxOctNodeArrayLength);
-            Profiler.EndSample();
-            
-            Profiler.BeginSample("Physics buffer"); 
-            using NativeList<OverlapBoxCommand> commands = new NativeList<OverlapBoxCommand>(MaxOctNodeArrayLength, Allocator.TempJob);
-            using NativeList<ColliderHit> results = new NativeList<ColliderHit>(MaxOctNodeArrayLength, Allocator.TempJob);
             Profiler.EndSample();
             
             Profiler.BeginSample("Direction Buffer"); 
@@ -160,8 +164,25 @@ namespace Candy.Pathfind3D
                         QueryParameters = query
                     };
                     setCommandJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
+                    
+                    
+                    NativeArray<OverlapBoxCommand> commandsView = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OverlapBoxCommand>(
+                        (byte*)commands.GetUnsafePtr(),
+                        currentDepthNodeCount,
+                        Allocator.None);
+                    NativeArray<ColliderHit> resultsView = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<ColliderHit>(
+                        (byte*)results.GetUnsafePtr(),
+                        currentDepthNodeCount,
+                        Allocator.None);
+                    
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+                    safetyHandle = AtomicSafetyHandle.Create();
+                    NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref commandsView, safetyHandle);
+                    safetyHandle = AtomicSafetyHandle.Create();
+                    NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref resultsView, safetyHandle);
+#endif
+                    OverlapBoxCommand.ScheduleBatch(commandsView, resultsView, commands.Length / cpuCount, 1).Complete();
                 }
-                OverlapBoxCommand.ScheduleBatch(commands.AsArray(), results.AsArray(), commands.Length / cpuCount, 1).Complete();
                 Profiler.EndSample();
 
                 Profiler.BeginSample("Obstacle Job"); 
@@ -169,7 +190,7 @@ namespace Candy.Pathfind3D
                 {
                     NativeArray<OctNode> output = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OctNode>(
                         (byte*)writeOctNode.GetUnsafePtr() + sizeof(OctNode) * beforeDepthNodeCount,
-                        results.Length,
+                        currentDepthNodeCount,
                         Allocator.None);
                     
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
@@ -182,7 +203,7 @@ namespace Candy.Pathfind3D
                         Nodes = output,
                         Hits = results.AsArray(),
                     };
-                    setObstacleJob.Schedule(results.Length, results.Length / cpuCount).Complete();
+                    setObstacleJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
                 }
                 
                 Profiler.EndSample();
