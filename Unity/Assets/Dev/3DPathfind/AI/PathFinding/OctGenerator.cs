@@ -4,6 +4,7 @@ using UnityEngine;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using UnityEngine.Profiling;
 
 public class OctGenerator : MonoBehaviour
 {
@@ -14,7 +15,7 @@ public class OctGenerator : MonoBehaviour
 
     [SerializeField] private float scale = 10f;
 
-    [Range(1, 4)]
+    [Range(1, 6)]
     [SerializeField] private int depth = 3;
     [SerializeField] private uint defaultDepth = 0;
     [SerializeField] private string[] layers = { "Default" };
@@ -70,7 +71,9 @@ public class OctGenerator : MonoBehaviour
 
         field.SetValue(new OctNode(), PathThreadSize);
 
+        Profiler.BeginSample("Create OctTree");
         CreateOcTree();
+        Profiler.EndSample();
     }
     public void Update()
     {
@@ -90,7 +93,9 @@ public class OctGenerator : MonoBehaviour
             w.Start();
             reset = false;
 
+            Profiler.BeginSample("Create Space");
             CreateSpace();
+            Profiler.EndSample();
 
             w.Stop();
             print(w.ElapsedMilliseconds / 1000f);
@@ -101,7 +106,9 @@ public class OctGenerator : MonoBehaviour
             w.Start();
             createGraph = false;
 
+            Profiler.BeginSample("Create Path");
             CreatePath();
+            Profiler.EndSample();
 
             w.Stop();
             print(w.ElapsedMilliseconds / 1000f);
@@ -315,10 +322,10 @@ public class OctGenerator : MonoBehaviour
 #if UNITY_EDITOR
     private void OnDrawGizmos()
     {
-        if (!Application.isPlaying) return;
-
         if(!hiddeWireCube)
             Gizmos.DrawWireCube(origin, scaledSize);
+        
+        if (!Application.isPlaying) return;
 
         if(drawEmptySpace || drawNotUseSpace)
         {

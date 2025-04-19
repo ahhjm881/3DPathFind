@@ -30,7 +30,7 @@ public class OctTree
     //Constructor
     public OctTree(Vector3 pos, Vector3 size, params string[] layers)
     {
-        graph = new List<PathGraphNode>();
+        graph = new List<PathGraphNode>(1024);
         position = pos;
         this.size = size;
 
@@ -98,10 +98,11 @@ public class OctTree
     {
         if (chunk < 1) return;
 
+        // 해당 공간 범위에 존재하는 Collider가 있는지 체크
         int c = Physics.OverlapBoxNonAlloc(node.data.pos, node.data.size * 0.5f, allCollider, Quaternion.identity, mask);
-
         bool on = c > 0 ? true : false;
 
+        // 최소 공간 분할 깊이 체크
         if (!on && this.chunk - defaultChunk >= chunk)
         {
             //PathGraphNode tempNode = null;
@@ -117,13 +118,12 @@ public class OctTree
             return;
         }
 
+        // 공간 분할 (하위 노드 생성)
         DivOct(node, chunk);
 
-
+        // 위에서 생성한 노드를 재귀적으로 분할
         Vector3 size = Vector3.one * scale * 0.5f;
-
         OctNode sender = null;
-
         sender = node.child[0];
         FF(pos + size, scale * 0.5f, chunk - 1, sender);
         sender = node.child[1];

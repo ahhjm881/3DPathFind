@@ -19,7 +19,7 @@ public class PathGraphNode
     //Constructor
     public PathGraphNode(Vector3 pos, Vector3 size, int thread, float weight = 0f)
     {
-        paths = new List<PathData>();
+        paths = new List<PathData>(16);
 
         position = pos;
         this.size = size;
