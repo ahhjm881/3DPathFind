@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
@@ -31,6 +32,7 @@ namespace Candy.Pathfind3D
 
         public readonly InitParameter Parameter;
 
+        public object LockObj = new();
         public NativeList<OctNode> OctNodes;
 
         public int MaxOctNodeArrayLength
@@ -75,6 +77,11 @@ namespace Candy.Pathfind3D
             return d;
         }
 
+        public void CreateSpace()
+        {
+            Divide();
+        }
+
         public void Divide()
         {
             int cpuCount = 32;
@@ -89,6 +96,11 @@ namespace Candy.Pathfind3D
             NativeList<OctNode> writeOctNode = new NativeList<OctNode>(MaxOctNodeArrayLength, Allocator.Persistent);
             writeOctNode.Add(new OctNode(0, true, 0, Parameter.Scale, true, Parameter.WorldPosition));
             writeOctNode.ResizeUninitialized(MaxOctNodeArrayLength);
+            Profiler.EndSample();
+            
+            Profiler.BeginSample("Physics buffer"); 
+            using NativeList<OverlapBoxCommand> commands = new NativeList<OverlapBoxCommand>(MaxOctNodeArrayLength, Allocator.TempJob);
+            using NativeList<ColliderHit> results = new NativeList<ColliderHit>(MaxOctNodeArrayLength, Allocator.TempJob);
             Profiler.EndSample();
             
             Profiler.BeginSample("Direction Buffer"); 
@@ -116,6 +128,8 @@ namespace Candy.Pathfind3D
                 int currentDepthNodeCount = IntPow8(i);
                 int beforeDepthNodeCount = IntPow8(i - 1);
 
+                commands.ResizeUninitialized(currentDepthNodeCount);
+                results.ResizeUninitialized(currentDepthNodeCount);
                 
                 Profiler.BeginSample("Divide Job"); 
                 OctNodeDivideJob divideJob = new OctNodeDivideJob()
@@ -129,8 +143,6 @@ namespace Candy.Pathfind3D
                 divideJob.Schedule(MaxOctNodeArrayLength, MaxOctNodeArrayLength / cpuCount).Complete();
                 Profiler.EndSample();
 
-                var commands = new NativeArray<OverlapBoxCommand>(currentDepthNodeCount, Allocator.TempJob);
-                var results = new NativeArray<ColliderHit>(currentDepthNodeCount, Allocator.TempJob);
 
                 Profiler.BeginSample("OverlapBox Job"); 
                 unsafe
@@ -156,13 +168,46 @@ namespace Candy.Pathfind3D
                 Profiler.EndSample();
 
                 Profiler.BeginSample("Obstacle Job"); 
-                OctNodeSetObstacleJob setObstacleJob = new OctNodeSetObstacleJob()
+                Profiler.BeginSample("Copy Array");
+                unsafe
                 {
-                    OctNodes = writeOctNode.AsArray(),
-                    Hits = results,
-                    Offset = beforeDepthNodeCount
-                };
-                setObstacleJob.Schedule(results.Length, results.Length / cpuCount).Complete();
+                    UnsafeUtility.MemCpy(
+                        (byte*)readOctNode.GetUnsafePtr() + sizeof(OctNode) * beforeDepthNodeCount, 
+                        (byte*)writeOctNode.GetUnsafeReadOnlyPtr() + sizeof(OctNode) * beforeDepthNodeCount,
+                        sizeof(OctNode) * results.Length
+                    );
+                }
+                Profiler.EndSample();
+
+                unsafe
+                {
+                    NativeArray<OctNode> input = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OctNode>(
+                        (byte*)readOctNode.GetUnsafePtr() + sizeof(OctNode) * beforeDepthNodeCount,
+                        results.Length,
+                        Allocator.None);
+                    
+                    NativeArray<OctNode> output = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OctNode>(
+                        (byte*)writeOctNode.GetUnsafePtr() + sizeof(OctNode) * beforeDepthNodeCount,
+                        results.Length,
+                        Allocator.None);
+                    
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+                    var safetyHandle = AtomicSafetyHandle.Create();
+                    NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref input, safetyHandle);
+                    
+                    safetyHandle = AtomicSafetyHandle.Create();
+                    NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref output, safetyHandle);
+#endif
+                    
+                    OctNodeSetObstacleJob setObstacleJob = new OctNodeSetObstacleJob()
+                    {
+                        Input = input,
+                        Output = output,
+                        Hits = results.AsArray(),
+                    };
+                    setObstacleJob.Schedule(results.Length, results.Length / cpuCount).Complete();
+                }
+                
                 Profiler.EndSample();
 
                 Profiler.BeginSample("Copy Array");
@@ -178,7 +223,10 @@ namespace Candy.Pathfind3D
             } 
 
             Profiler.BeginSample("End");
-            OctNodes = writeOctNode;
+            lock (LockObj)
+            {
+                OctNodes = writeOctNode;
+            }
             Profiler.EndSample();
         }
 

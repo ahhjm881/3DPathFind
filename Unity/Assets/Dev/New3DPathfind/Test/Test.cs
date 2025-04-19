@@ -18,7 +18,7 @@ namespace Candy.Pathfind3D
             _tree = new OctTree(_param);
             
             Profiler.BeginSample("Create Space");
-            _tree.Divide();
+            _tree.CreateSpace();
             Profiler.EndSample();
         }
 
@@ -34,6 +34,15 @@ namespace Candy.Pathfind3D
             if (IsDraw is false) return;
             
             if (_tree is null) return;
+
+            NativeList<OctNode> arr;
+            
+            lock (_tree.LockObj)
+            {
+                arr = _tree.OctNodes;
+            }
+
+            if (arr.IsCreated is false) return;
 
             for (int i = 0; i < _tree.OctNodes.Length; i++)
             {

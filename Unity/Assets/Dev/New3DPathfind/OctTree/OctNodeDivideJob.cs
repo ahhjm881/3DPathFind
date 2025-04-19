@@ -27,21 +27,22 @@ namespace Candy.Pathfind3D
         }
     }
 
-    [BurstCompile(DisableSafetyChecks = true)]
+    [BurstCompile]
     public struct OctNodeSetObstacleJob : IJobParallelFor
     {
-        public NativeArray<ColliderHit> Hits;
-        public NativeArray<OctNode> OctNodes;
-
-        public int Offset;
+        [ReadOnly] public NativeArray<ColliderHit> Hits;
+        [ReadOnly] public NativeArray<OctNode> Input;
+        
+        [WriteOnly]
+        public NativeArray<OctNode> Output;
         
         public void Execute(int index)
         {
             if (Hits[index].instanceID != 0)
             {
-                OctNode tempNode = OctNodes[Offset + index];
+                OctNode tempNode = Input[index];
                 tempNode.IsObstacle = true;
-                OctNodes[Offset + index] = tempNode;
+                Output[index] = tempNode;
             }
         }
     }
@@ -64,6 +65,7 @@ namespace Candy.Pathfind3D
     [BurstCompile]
     public struct OctNodeDivideJob : IJobParallelFor
     {
+        [WriteOnly]
         public NativeArray<OctNode> WriteOctNodeList;
 
         [ReadOnly] 
@@ -86,6 +88,16 @@ namespace Candy.Pathfind3D
             }
             if (ReadOctNodeList[parentIndex].IsObstacle is false)
             {
+                OctNode n = new OctNode(
+                    0,
+                    false,
+                    0,
+                    0f,
+                    false,
+                    float3.zero
+                );
+
+                WriteOctNodeList[index] = n;
                 return;
             }
 
