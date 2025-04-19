@@ -155,6 +155,7 @@ namespace Candy.Pathfind3D
                 Profiler.EndSample();
                 
                 Profiler.BeginSample("Divide Job");
+                Profiler.BeginSample("#" + i);
                 OctNodeDivideJob divideJob = new OctNodeDivideJob()
                 {
                     WriteOctNodeList = writeOctNode.AsArray(),
@@ -165,6 +166,7 @@ namespace Candy.Pathfind3D
                 };
 
                 divideJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
+                Profiler.EndSample();
                 Profiler.EndSample();
 
 
