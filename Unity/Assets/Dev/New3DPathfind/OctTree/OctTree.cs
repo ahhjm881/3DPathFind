@@ -55,6 +55,13 @@ namespace Candy.Pathfind3D
         private static int GetNodeCountOfDepth(int depth)
         {
             int d = 0;
+
+            /*
+            d += IntPow8(depth);
+            d += IntPow8(depth - 1);
+
+            return d;*/
+            
             for (int i = 0; i <= depth; i++)
             {
                 d += IntPow8(i);
@@ -98,8 +105,23 @@ namespace Candy.Pathfind3D
             Profiler.BeginSample("Ready Array"); 
             Profiler.BeginSample("Write buffer"); 
             NativeList<OctNode> writeOctNode = new NativeList<OctNode>(MaxOctNodeArrayLength, Allocator.Persistent);
-            writeOctNode.Add(new OctNode(0, true, 0, Parameter.Scale, true, Parameter.WorldPosition));
             writeOctNode.ResizeUninitialized(MaxOctNodeArrayLength);
+            unsafe
+            {
+                Profiler.BeginSample("Clear buffer"); 
+                //UnsafeUtility.MemClear(writeOctNode.GetUnsafePtr(), sizeof(OctNode) * MaxOctNodeArrayLength);
+                
+                new OctNodeClearJob()
+                {
+                    Nodes = writeOctNode.AsArray()
+                }.Schedule(MaxOctNodeArrayLength, MaxOctNodeArrayLength / cpuCount).Complete();
+                
+                Profiler.EndSample();
+                
+                (*writeOctNode.GetUnsafePtr()) =
+                    new OctNode(0, true, 0, Parameter.Scale, true, Parameter.WorldPosition);
+                
+            }
             Profiler.EndSample();
             
             Profiler.BeginSample("Direction Buffer"); 
@@ -122,7 +144,7 @@ namespace Candy.Pathfind3D
 
             var query = new QueryParameters(~0);
 
-            for (int i = 0; i < Parameter.MaxDepth; i++)
+            for (int i = 1; i <= Parameter.MaxDepth; i++)
             {
                 int currentDepthNodeCount = IntPow8(i);
                 int beforeDepthNodeCount = IntPow8(i - 1);
@@ -135,10 +157,11 @@ namespace Candy.Pathfind3D
                 Profiler.BeginSample("Divide Job");
                 OctNodeDivideJob divideJob = new OctNodeDivideJob()
                 {
-                    CurrentDepth = i,
                     WriteOctNodeList = writeOctNode.AsArray(),
                     ChildDirectionVectorArray = directionVectorArray,
-                    Offset = beforeDepthNodeCount
+                    Offset = beforeDepthNodeCount,
+                    QueryParameters = query,
+                    Commands = commands.AsArray()
                 };
 
                 divideJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
@@ -148,24 +171,6 @@ namespace Candy.Pathfind3D
                 Profiler.BeginSample("OverlapBox Job"); 
                 unsafe
                 {
-                    NativeArray<OctNode> input = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OctNode>(
-                        (byte*)writeOctNode.GetUnsafePtr() + sizeof(OctNode) * beforeDepthNodeCount,
-                        currentDepthNodeCount,
-                        Allocator.None);
-                    
-#if ENABLE_UNITY_COLLECTIONS_CHECKS
-                    var safetyHandle = AtomicSafetyHandle.Create();
-                    NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref input, safetyHandle);
-#endif
-                    OctNodeSetCommandJob setCommandJob = new OctNodeSetCommandJob()
-                    {
-                        Output = commands.AsArray(),
-                        Input = input,
-                        QueryParameters = query
-                    };
-                    setCommandJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
-                    
-                    
                     NativeArray<OverlapBoxCommand> commandsView = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OverlapBoxCommand>(
                         (byte*)commands.GetUnsafePtr(),
                         currentDepthNodeCount,
@@ -176,6 +181,7 @@ namespace Candy.Pathfind3D
                         Allocator.None);
                     
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
+                    AtomicSafetyHandle safetyHandle = AtomicSafetyHandle.Create();
                     safetyHandle = AtomicSafetyHandle.Create();
                     NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref commandsView, safetyHandle);
                     safetyHandle = AtomicSafetyHandle.Create();

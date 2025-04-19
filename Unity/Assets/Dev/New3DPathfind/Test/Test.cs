@@ -88,6 +88,21 @@ namespace Candy.Pathfind3D
                             OctNode node = tree.OctNodes[i];
                             if (node.IsGenerated is false) continue;
 
+                            /*
+                            bool flag = false;
+                            for (int j = 0; j < 8; j++)
+                            {
+                                int childIndex = 8 * node.Index + (j + 1);
+                                if (childIndex >= tree.OctNodes.Length)
+                                {
+                                    break;
+                                }
+                                flag |= tree.OctNodes[childIndex].IsGenerated;
+                            }
+
+                            if (flag)
+                                continue;*/
+                            
                             Gizmos.color = node.IsObstacle ? Color.yellow : Color.blue;
                 
                             Gizmos.DrawWireCube(node.WorldPosition, Vector3.one * node.Scale);

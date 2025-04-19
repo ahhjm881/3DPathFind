@@ -8,29 +8,14 @@ using UnityEngine.Serialization;
 namespace Candy.Pathfind3D
 {
     [BurstCompile]
-    public struct OctNodeSetCommandJob : IJobParallelFor
+    public struct OctNodeClearJob : IJobParallelFor
     {
-        [WriteOnly] public NativeArray<OverlapBoxCommand> Output;
-        [ReadOnly] public NativeArray<OctNode> Input;
-        [ReadOnly] public QueryParameters QueryParameters;
+        [WriteOnly]
+        public NativeArray<OctNode> Nodes;
         
         public void Execute(int index)
         {
-            OctNode node = Input[index];
-            QueryParameters query = QueryParameters;
-            if (node.IsGenerated is false)
-            {
-                query.layerMask = 0;
-            }
-            
-            OverlapBoxCommand command = new OverlapBoxCommand(
-                node.WorldPosition,
-                node.Scale * new float3(1f, 1f, 1f) * 0.5f,
-                Quaternion.identity,
-                query
-            );
-
-            Output[index] = command;
+            Nodes[index] = new OctNode(0, false, 0, 0f, false, float3.zero);
         }
     }
 
@@ -38,7 +23,8 @@ namespace Candy.Pathfind3D
     public struct OctNodeSetObstacleJob : IJobParallelFor
     {
         [ReadOnly] public NativeArray<ColliderHit> Hits;
-        [ReadOnly] public NativeArray<OctNode> Nodes;
+        
+        public NativeArray<OctNode> Nodes;
         
         public void Execute(int index)
         {
@@ -55,26 +41,27 @@ namespace Candy.Pathfind3D
     public struct OctNodeDivideJob : IJobParallelFor
     {
         public NativeArray<OctNode> WriteOctNodeList;
-
-        [ReadOnly] 
-        public int CurrentDepth;
+        public NativeArray<OverlapBoxCommand> Commands;
         
+        [ReadOnly]
+        public QueryParameters QueryParameters;
+
         [ReadOnly]
         public NativeArray<float3> ChildDirectionVectorArray;
 
-        [ReadOnly] public int Offset;
+        [ReadOnly] 
+        public int Offset;
 
         public void Execute(int index)
         {
+            int originIndex = index;
+            
+            if (Offset == 0) return;
             index += Offset;
-            if (index == 0) return;
             int parentIndex = (index - 1) / 8;
-
-            if (WriteOctNodeList[parentIndex].Depth != CurrentDepth - 1)
-            {
-                return;
-            }
-            if (WriteOctNodeList[parentIndex].IsObstacle is false)
+            OctNode parentNode = WriteOctNodeList[parentIndex];
+            
+            if (parentNode.IsObstacle is false || parentNode.IsGenerated is false)
             {
                 OctNode n = new OctNode(
                     0,
@@ -84,13 +71,13 @@ namespace Candy.Pathfind3D
                     false,
                     float3.zero
                 );
-
                 WriteOctNodeList[index] = n;
+                
+                QueryParameters q = QueryParameters;
+                q.layerMask = 0;
+                Commands[originIndex] = new OverlapBoxCommand(Vector3.zero, Vector3.zero, Quaternion.identity, q);
                 return;
             }
-
-
-            OctNode parentNode = WriteOctNodeList[parentIndex];
 
             float childScale = parentNode.Scale * 0.5f;
             float3 parentPos = parentNode.WorldPosition;
@@ -101,13 +88,14 @@ namespace Candy.Pathfind3D
             OctNode childNode = new OctNode(
                 index,
                 false,
-                CurrentDepth,
+                parentNode.Depth + 1,
                 childScale,
                 true,
                 childPos
             );
 
             WriteOctNodeList[index] = childNode;
+            Commands[originIndex] = new OverlapBoxCommand(childPos, Vector3.one * childScale * 0.5f, Quaternion.identity, QueryParameters);
         }
     }
 }
