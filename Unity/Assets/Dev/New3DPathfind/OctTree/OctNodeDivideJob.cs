@@ -98,4 +98,129 @@ namespace Candy.Pathfind3D
             Commands[originIndex] = new OverlapBoxCommand(childPos, Vector3.one * childScale * 0.5f, Quaternion.identity, QueryParameters);
         }
     }
+
+    [BurstCompile(DisableSafetyChecks = true)]
+    public struct OctNodeFlattenCountingJob : IJob
+    {
+        public NativeArray<NativeOctNode> Nodes;
+        
+        [WriteOnly]
+        public NativeArray<int> IndexTargetCountResult;
+
+        [WriteOnly] 
+        public NativeArray<int> FlattenCountResult;
+        
+        public void Execute()
+        {
+            int indexTargetCount = 0;
+            int flattenCount = 0;
+
+            for (int i = 0; i < Nodes.Length; i++)
+            {
+                NativeOctNode node = Nodes[i];
+                if (node.IsGenerated == false) continue;
+                node.FlattenIndex = flattenCount;
+                Nodes[i] = node;
+                flattenCount++;
+
+                int beforeIndexTargetCount = indexTargetCount;
+                for (int j = 1; j <= 8; j++)
+                {
+                    int childIndex = node.Index * 8 + j;
+                    if (childIndex >= Nodes.Length) break;
+                    
+                    if (Nodes[childIndex].IsGenerated)
+                    {
+                        indexTargetCount++;
+                    }
+                }
+                
+                // 자식이 없으면, -1 삽입
+                if (beforeIndexTargetCount == indexTargetCount)
+                {
+                    indexTargetCount++;
+                }
+            }
+
+            IndexTargetCountResult[0] = indexTargetCount;
+            FlattenCountResult[0] = flattenCount;
+        }
+    }
+
+
+    [BurstCompile]
+    public struct OctNodeFlattenFirstJob : IJob
+    {
+        [ReadOnly]
+        public NativeArray<NativeOctNode> Nodes;
+
+        [WriteOnly]
+        public NativeArray<NativeOctNode> Flatten;
+        
+        public void Execute()
+        {
+            int flattenCount = 0;
+
+            for (int i = 0; i < Nodes.Length; i++)
+            {
+                NativeOctNode node = Nodes[i];
+                if (node.IsGenerated == false) continue;
+                Flatten[flattenCount] = node;
+                flattenCount++;
+            }
+        }
+    }
+
+    [BurstCompile]
+    public struct OctNodeFlattenSecondJob : IJob
+    {
+        [WriteOnly]
+        public NativeArray<int> MapperIndexOutput;
+        
+        [WriteOnly]
+        public NativeArray<int> MapperTargetOutput;
+        
+        [ReadOnly]
+        public NativeArray<NativeOctNode> Tree;
+        [ReadOnly]
+        public NativeArray<NativeOctNode> Flatten;
+
+        [ReadOnly] public int Count;
+        
+        public void Execute()
+        {
+            int mapperTargetCount = 0;
+            int mapperIndexCount = 0;
+            for (int i = 0; i < Count; i++)
+            {
+                NativeOctNode node = Flatten[i];
+                
+                int index = node.Index;
+
+                int beforeMapperTargetCount = mapperTargetCount;
+                for (int j = 1; j <= 8; j++)
+                {
+                    int childIndex = index * 8 + j;
+                    if (childIndex >= Tree.Length) break;
+
+                    node = Tree[childIndex];
+                    if (node.IsGenerated)
+                    {
+                        MapperTargetOutput[mapperTargetCount] = node.FlattenIndex;
+                        ++mapperTargetCount;
+                    }
+                }
+
+                // 자식이 없으면
+                if (mapperTargetCount == beforeMapperTargetCount)
+                {
+                    MapperTargetOutput[mapperTargetCount] = -1;
+                    ++mapperTargetCount;
+                }
+
+                MapperIndexOutput[mapperIndexCount] = beforeMapperTargetCount;
+                ++mapperIndexCount;
+            }
+        }
+    }
 }

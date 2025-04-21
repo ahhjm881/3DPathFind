@@ -10,6 +10,7 @@ namespace Candy.Pathfind3D
     public struct NativeOctNode
     {
         public int Index;
+        public int FlattenIndex;
 
         public bool IsObstacle;
         
@@ -32,6 +33,7 @@ namespace Candy.Pathfind3D
             Scale = scale;
             WorldPosition = worldPosition;
             IsGenerated = isGenerated;
+            FlattenIndex = -1;
         }
     }
 } 

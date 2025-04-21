@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Profiling;
@@ -105,6 +107,7 @@ namespace Candy.Pathfind3D
 
             if (IsDraw is false) return;
             if (_trees is null) return;
+            
 
             for (int x = 0; x < Size.x; x++)
             {
@@ -113,31 +116,48 @@ namespace Candy.Pathfind3D
                     for (int z = 0; z < Size.z; z++)
                     {
                         OctTree tree = _trees[x, y, z];
-                        if (tree.OctNodes.IsCreated is false) return;
+                        NativeFlattenOctTree nativeTree = tree.NativeTree;
+                        Queue<int> queue = new Queue<int>(100);
+                        queue.Enqueue(nativeTree.RootIndex);
 
-                        for (int i = 0; i < tree.OctNodes.Length; i++)
+                        bool exit = false;
+
+                        while (queue.Any() && exit is false)
                         {
-                            NativeOctNode node = tree.OctNodes[i];
-                            if (node.IsGenerated is false) continue;
-
-                            /*
-                            bool flag = false;
-                            for (int j = 0; j < 8; j++)
+                            int count = queue.Count;
+                            for (int i = 0; i < count; i++)
                             {
-                                int childIndex = 8 * node.Index + (j + 1);
-                                if (childIndex >= tree.OctNodes.Length)
-                                {
-                                    break;
-                                }
-                                flag |= tree.OctNodes[childIndex].IsGenerated;
-                            }
+                                int index = queue.Dequeue();
+                                NativeOctNode node = nativeTree.GetNode(index);
+                                Color nodeColor;
 
-                            if (flag)
-                                continue;*/
-                            
-                            Gizmos.color = node.IsObstacle ? Color.yellow : Color.blue;
-                
-                            Gizmos.DrawWireCube(node.WorldPosition, Vector3.one * node.Scale);
+                                if (node.IsGenerated is false)
+                                {
+                                    Debug.LogError($"[ERROR] node index: {node.Index}");
+                                    nodeColor = Color.red;
+                                }
+                                else
+                                {
+                                    nodeColor = node.IsObstacle ? Color.yellow : Color.blue;
+                                }
+
+                                NativeFlattenOctTree.IndexRange range = nativeTree.GetChildIndexRange(index);
+                                if (range.IsValid())
+                                {
+                                    for (int j = range.Begin; j < range.End; j++)
+                                    {
+                                        int childIndex = nativeTree.MapIndex(j);
+                                        if (childIndex == -1) continue;
+                                        queue.Enqueue(childIndex);
+                                    }
+                                }
+                                
+                                if(nativeTree.HasChild(range) is false)
+                                {
+                                    Gizmos.color = nodeColor;
+                                    Gizmos.DrawWireCube(node.WorldPosition, Vector3.one * node.Scale);
+                                }
+                            }
                         }
                     }
                 }

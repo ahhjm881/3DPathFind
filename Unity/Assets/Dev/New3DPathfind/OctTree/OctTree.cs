@@ -32,8 +32,7 @@ namespace Candy.Pathfind3D
 
         public readonly InitParameter Parameter;
 
-        public object LockObj = new();
-        public NativeArray<NativeOctNode> OctNodes;
+        public NativeFlattenOctTree NativeTree { get; private set; }
 
         public int MaxOctNodeArrayLength => GetMaxOctNodeArrayLength(Parameter);
 
@@ -85,7 +84,17 @@ namespace Candy.Pathfind3D
 
         public void CreateSpace(NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results)
         {
-            Divide(overlapBoxCommands, results);
+            NativeArray<NativeOctNode> arrayTree = Divide(overlapBoxCommands, results);
+            (NativeArray<NativeOctNode> flattenArr, NativeArray<int> indexArr, NativeArray<int> treeArr) = ToFlatten(arrayTree);
+
+            arrayTree.Dispose();
+
+            NativeTree = new NativeFlattenOctTree()
+            {
+                FlattenArr = flattenArr,
+                IndexArr = indexArr,
+                TreeArr = treeArr
+            };
         }
 
         public static (NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results) CreatePhysicsBuffer(InitParameter parameter)
@@ -98,7 +107,7 @@ namespace Candy.Pathfind3D
             return (commands, results);
         }
 
-        public void Divide(NativeArray<OverlapBoxCommand> commands, NativeArray<ColliderHit> results)
+        public NativeArray<NativeOctNode> Divide(NativeArray<OverlapBoxCommand> commands, NativeArray<ColliderHit> results)
         {
             int cpuCount = 32;
 
@@ -202,18 +211,65 @@ namespace Candy.Pathfind3D
                 Profiler.EndSample();
             } 
 
-            Profiler.BeginSample("End");
-            lock (LockObj)
+            return writeOctNode;
+        }
+
+        private (NativeArray<NativeOctNode> flattenArr, NativeArray<int> indexArr, NativeArray<int> treeArr) ToFlatten(NativeArray<NativeOctNode> nonFlattenArray)
+        {
+            Profiler.BeginSample("Flatten");
+            using NativeArray<int> flattenCountResult = new NativeArray<int>(1, Allocator.TempJob);
+            using NativeArray<int> indexTargetResult = new NativeArray<int>(1, Allocator.TempJob);
+            
+            Profiler.BeginSample("Counting");
+            OctNodeFlattenCountingJob countJob = new OctNodeFlattenCountingJob()
             {
-                OctNodes = writeOctNode;
-            }
+                Nodes = nonFlattenArray,
+                IndexTargetCountResult = indexTargetResult,
+                FlattenCountResult = flattenCountResult,
+            };
+            countJob.Schedule().Complete();
             Profiler.EndSample();
+            
+            int indexTargetArrLength = indexTargetResult[0];
+            int flattenArrLength = flattenCountResult[0];
+            
+            Profiler.BeginSample("Init Buffer");
+            NativeArray<int> mapperIndexArr = new NativeArray<int>(flattenArrLength, Allocator.Persistent);
+            NativeArray<int> mapperTargetArr = new NativeArray<int>(indexTargetArrLength, Allocator.Persistent);
+            NativeArray<NativeOctNode> flattenArr = new NativeArray<NativeOctNode>(flattenArrLength, Allocator.Persistent);
+            Profiler.EndSample();
+            
+            Profiler.BeginSample("First Job");
+            OctNodeFlattenFirstJob firstFlattenJob = new OctNodeFlattenFirstJob()
+            {
+                Nodes = nonFlattenArray,
+                Flatten = flattenArr,
+            };
+            firstFlattenJob.Schedule().Complete();
+            Profiler.EndSample();
+
+
+            Profiler.BeginSample("Second Buffer");
+            OctNodeFlattenSecondJob secondFlattenJob = new OctNodeFlattenSecondJob()
+            {
+                Count = flattenArrLength,
+                Tree = nonFlattenArray,
+                MapperIndexOutput = mapperIndexArr,
+                MapperTargetOutput = mapperTargetArr,
+                Flatten = flattenArr
+            };
+            secondFlattenJob.Schedule().Complete();
+            Profiler.EndSample();
+            
+            Profiler.EndSample();
+
+            return (flattenArr, mapperIndexArr, mapperTargetArr);
         }
 
 
         public void Dispose()
         {
-            OctNodes.Dispose();
+            NativeTree.Dispose();
         }
     }
 }
