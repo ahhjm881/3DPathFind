@@ -33,7 +33,7 @@ namespace Candy.Pathfind3D
         public readonly InitParameter Parameter;
 
         public object LockObj = new();
-        public NativeList<OctNode> OctNodes;
+        public NativeArray<NativeOctNode> OctNodes;
 
         public int MaxOctNodeArrayLength => GetMaxOctNodeArrayLength(Parameter);
 
@@ -83,45 +83,36 @@ namespace Candy.Pathfind3D
             return d;
         }
 
-        public void CreateSpace(NativeList<OverlapBoxCommand> overlapBoxCommands, NativeList<ColliderHit> results)
+        public void CreateSpace(NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results)
         {
             Divide(overlapBoxCommands, results);
         }
 
-        public static (NativeList<OverlapBoxCommand> overlapBoxCommands, NativeList<ColliderHit> results) CreatePhysicsBuffer(InitParameter parameter)
+        public static (NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results) CreatePhysicsBuffer(InitParameter parameter)
         {
             Profiler.BeginSample("Physics buffer"); 
-            NativeList<OverlapBoxCommand> commands = new NativeList<OverlapBoxCommand>(GetMaxOctNodeArrayLength(parameter), Allocator.TempJob);
-            NativeList<ColliderHit> results = new NativeList<ColliderHit>(GetMaxOctNodeArrayLength(parameter), Allocator.TempJob);
+            NativeArray<OverlapBoxCommand> commands = new NativeArray<OverlapBoxCommand>(GetMaxOctNodeArrayLength(parameter), Allocator.TempJob);
+            NativeArray<ColliderHit> results = new NativeArray<ColliderHit>(GetMaxOctNodeArrayLength(parameter), Allocator.TempJob);
             Profiler.EndSample();
-
+            
             return (commands, results);
         }
 
-        public void Divide(NativeList<OverlapBoxCommand> commands, NativeList<ColliderHit> results)
+        public void Divide(NativeArray<OverlapBoxCommand> commands, NativeArray<ColliderHit> results)
         {
             int cpuCount = 32;
 
             Profiler.BeginSample("Ready Array"); 
             Profiler.BeginSample("Write buffer"); 
-            NativeList<OctNode> writeOctNode = new NativeList<OctNode>(MaxOctNodeArrayLength, Allocator.Persistent);
-            writeOctNode.ResizeUninitialized(MaxOctNodeArrayLength);
-            unsafe
+            NativeArray<NativeOctNode> writeOctNode = new NativeArray<NativeOctNode>(MaxOctNodeArrayLength, Allocator.Persistent);
+            Profiler.BeginSample("Clear buffer"); 
+            new OctNodeClearJob()
             {
-                Profiler.BeginSample("Clear buffer"); 
-                //UnsafeUtility.MemClear(writeOctNode.GetUnsafePtr(), sizeof(OctNode) * MaxOctNodeArrayLength);
-                
-                new OctNodeClearJob()
-                {
-                    Nodes = writeOctNode.AsArray()
-                }.Schedule(MaxOctNodeArrayLength, MaxOctNodeArrayLength / cpuCount).Complete();
-                
-                Profiler.EndSample();
-                
-                (*writeOctNode.GetUnsafePtr()) =
-                    new OctNode(0, true, 0, Parameter.Scale, true, Parameter.WorldPosition);
-                
-            }
+                Nodes = writeOctNode
+            }.Schedule(MaxOctNodeArrayLength, MaxOctNodeArrayLength / cpuCount).Complete();
+            
+            Profiler.EndSample();
+            writeOctNode[0] =  new NativeOctNode(0, true, 0, Parameter.Scale, true, Parameter.WorldPosition);
             Profiler.EndSample();
             
             Profiler.BeginSample("Direction Buffer"); 
@@ -149,28 +140,22 @@ namespace Candy.Pathfind3D
                 int currentDepthNodeCount = IntPow8(i);
                 int beforeDepthNodeCount = IntPow8(i - 1);
 
-                Profiler.BeginSample("ResizeUninitialized Physics Buffer");
-                commands.ResizeUninitialized(currentDepthNodeCount);
-                results.ResizeUninitialized(currentDepthNodeCount);
-                Profiler.EndSample();
-                
                 Profiler.BeginSample("Divide Job");
                 Profiler.BeginSample("#" + i);
                 OctNodeDivideJob divideJob = new OctNodeDivideJob()
                 {
-                    WriteOctNodeList = writeOctNode.AsArray(),
+                    WriteOctNodeList = writeOctNode,
                     ChildDirectionVectorArray = directionVectorArray,
                     Offset = beforeDepthNodeCount,
                     QueryParameters = query,
-                    Commands = commands.AsArray()
+                    Commands = commands
                 };
-
                 divideJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
+                
                 Profiler.EndSample();
                 Profiler.EndSample();
 
-
-                Profiler.BeginSample("OverlapBox Job"); 
+                 Profiler.BeginSample("OverlapBox Job"); 
                 unsafe
                 {
                     NativeArray<OverlapBoxCommand> commandsView = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OverlapBoxCommand>(
@@ -196,8 +181,8 @@ namespace Candy.Pathfind3D
                 Profiler.BeginSample("Obstacle Job"); 
                 unsafe
                 {
-                    NativeArray<OctNode> output = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OctNode>(
-                        (byte*)writeOctNode.GetUnsafePtr() + sizeof(OctNode) * beforeDepthNodeCount,
+                    NativeArray<NativeOctNode> output = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<NativeOctNode>(
+                        (byte*)writeOctNode.GetUnsafePtr() + sizeof(NativeOctNode) * beforeDepthNodeCount,
                         currentDepthNodeCount,
                         Allocator.None);
                     
@@ -209,7 +194,7 @@ namespace Candy.Pathfind3D
                     OctNodeSetObstacleJob setObstacleJob = new OctNodeSetObstacleJob()
                     {
                         Nodes = output,
-                        Hits = results.AsArray(),
+                        Hits = results,
                     };
                     setObstacleJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
                 }

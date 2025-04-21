@@ -11,11 +11,11 @@ namespace Candy.Pathfind3D
     public struct OctNodeClearJob : IJobParallelFor
     {
         [WriteOnly]
-        public NativeArray<OctNode> Nodes;
+        public NativeArray<NativeOctNode> Nodes;
         
         public void Execute(int index)
         {
-            Nodes[index] = new OctNode(0, false, 0, 0f, false, float3.zero);
+            Nodes[index] = new NativeOctNode(0, false, 0, 0f, false, float3.zero);
         }
     }
 
@@ -24,13 +24,13 @@ namespace Candy.Pathfind3D
     {
         [ReadOnly] public NativeArray<ColliderHit> Hits;
         
-        public NativeArray<OctNode> Nodes;
+        public NativeArray<NativeOctNode> Nodes;
         
         public void Execute(int index)
         {
             if (Hits[index].instanceID != 0)
             {
-                OctNode tempNode = Nodes[index];
+                NativeOctNode tempNode = Nodes[index];
                 tempNode.IsObstacle = true;
                 Nodes[index] = tempNode;
             }
@@ -40,7 +40,7 @@ namespace Candy.Pathfind3D
     [BurstCompile(DisableSafetyChecks = true)]
     public struct OctNodeDivideJob : IJobParallelFor
     {
-        public NativeArray<OctNode> WriteOctNodeList;
+        public NativeArray<NativeOctNode> WriteOctNodeList;
         public NativeArray<OverlapBoxCommand> Commands;
         
         [ReadOnly]
@@ -59,11 +59,11 @@ namespace Candy.Pathfind3D
             if (Offset == 0) return;
             index += Offset;
             int parentIndex = (index - 1) / 8;
-            OctNode parentNode = WriteOctNodeList[parentIndex];
+            NativeOctNode parentNode = WriteOctNodeList[parentIndex];
             
             if (parentNode.IsObstacle is false || parentNode.IsGenerated is false)
             {
-                OctNode n = new OctNode(
+                NativeOctNode n = new NativeOctNode(
                     0,
                     false,
                     0,
@@ -85,7 +85,7 @@ namespace Candy.Pathfind3D
             int childNum = index - (8 * parentIndex) - 1;
             float3 childPos = (ChildDirectionVectorArray[childNum] * childScale) + parentPos;
 
-            OctNode childNode = new OctNode(
+            NativeOctNode childNode = new NativeOctNode(
                 index,
                 false,
                 parentNode.Depth + 1,

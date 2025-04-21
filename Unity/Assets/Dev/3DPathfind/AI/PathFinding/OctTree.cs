@@ -40,7 +40,7 @@ public class OctTree
     //Method
     public void Generate()
     {
-        if (chunk > 6) chunk = 6;
+        //if (chunk > 6) chunk = 6;
         graph.Clear();
 
         if (rootOctNode != null)

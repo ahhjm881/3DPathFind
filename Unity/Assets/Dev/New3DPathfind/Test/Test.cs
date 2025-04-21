@@ -1,5 +1,7 @@
 using System;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.Profiling;
 
@@ -12,6 +14,36 @@ namespace Candy.Pathfind3D
 
         [SerializeField] private OctTree.InitParameter _param;
 
+        private static int GetNodeCountOfDepth(int depth)
+        {
+            int d = 0;
+
+            /*
+            d += IntPow8(depth);
+            d += IntPow8(depth - 1);
+
+            return d;*/
+            
+            for (int i = 0; i <= depth; i++)
+            {
+                d += IntPow8(i);
+            }
+
+            return d;
+        }
+
+        private static int IntPow8(int x)
+        {
+            if (x < 0) return 0;
+
+            int d = 1;
+            for (int i = 0; i < x; i++)
+            {
+                d *= 8;
+            }
+
+            return d;
+        }
         private OctTree[,,] _trees;
         private void Start()
         {
@@ -20,7 +52,7 @@ namespace Candy.Pathfind3D
             Profiler.BeginSample("Create Space");
             
             Profiler.BeginSample("Init Physics Buffer");
-            (NativeList<OverlapBoxCommand> overlapBoxCommands, NativeList<ColliderHit> results) = OctTree.CreatePhysicsBuffer(_param);
+            (NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results) = OctTree.CreatePhysicsBuffer(_param);
             Profiler.EndSample();
             
             
@@ -85,7 +117,7 @@ namespace Candy.Pathfind3D
 
                         for (int i = 0; i < tree.OctNodes.Length; i++)
                         {
-                            OctNode node = tree.OctNodes[i];
+                            NativeOctNode node = tree.OctNodes[i];
                             if (node.IsGenerated is false) continue;
 
                             /*
