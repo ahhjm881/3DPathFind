@@ -36,21 +36,21 @@ namespace Candy.Pathfind3D
                 long size = 0;
                 long totalSize = 0;
                 
-                size = NativeArrayMemoryTracker.GetMemorySizeBytes(FlattenArr);
+                size = NativeUtility.GetMemorySizeBytes(FlattenArr);
                 if (size == 0)
                 {
                     return 0;
                 }
                 totalSize += size;
 
-                size = NativeArrayMemoryTracker.GetMemorySizeBytes(IndexArr);
+                size = NativeUtility.GetMemorySizeBytes(IndexArr);
                 if (size == 0)
                 {
                     return 0;
                 }
                 totalSize += size;
 
-                size = NativeArrayMemoryTracker.GetMemorySizeBytes(TreeArr);
+                size = NativeUtility.GetMemorySizeBytes(TreeArr);
                 if (size == 0)
                 {
                     return 0;

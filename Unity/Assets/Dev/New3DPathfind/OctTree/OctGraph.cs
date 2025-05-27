@@ -2,6 +2,7 @@ using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Jobs;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace Candy.Pathfind3D
@@ -9,10 +10,10 @@ namespace Candy.Pathfind3D
     public class OctGraph : IDisposable
     {
         private unsafe NativeEdge** _edge2Ptr;
-        private NativeArray<int> _edgeLen;
+        private NativeList<int> _edgeLen;
         private int _edge2PtrLength;
 
-        public NativeArray<int> EdgeLen => _edgeLen;
+        public NativeArray<int> EdgeLen => _edgeLen.AsArray();
 
         public int EdgeArrLength => _edge2PtrLength;
 
@@ -45,7 +46,8 @@ namespace Candy.Pathfind3D
             NativeEdge edge;
             unsafe
             {
-                edge = _edge2Ptr[nodeIndex][edgeIndex];
+                NativeEdge* edges = _edge2Ptr[nodeIndex];
+                edge = edges[edgeIndex];
             }
 
             return edge;
@@ -74,40 +76,89 @@ namespace Candy.Pathfind3D
             return totalNodeCount;
         }
 
-        public void Tree2Graph(NativeFlattenOctTree tree)
+        public void Tree2Graph(NativeFlattenOctTree tree, NativeFlattenOctTree targetTree)
         {
             int cpuCoreCount = 32;
 
             int maxEdgeArrayLength = IntegerMath.CubeRootOf8(tree.Depth);
-            NativeArray<int> edgeLenBuf = new NativeArray<int>(tree.FlattenArr.Length, Allocator.Persistent);
 
 
             unsafe
             {
-                int size = tree.FlattenArr.Length * sizeof(NativeEdge*);
-                _edge2PtrLength = tree.FlattenArr.Length;
-                NativeEdge** edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(
-                    size,
-                    UnsafeUtility.AlignOf<NativeEdge>(),
-                    Allocator.Persistent);
-                _edge2Ptr = edge2Ptr;
-                _edgeLen = edgeLenBuf;
+                int offset = _edge2PtrLength;
                 
-                UnsafeUtility.MemClear(edge2Ptr, size);
+                if (_edge2Ptr == null)
+                {
+                    Debug.Assert(_edgeLen.IsCreated is false);
+                    _edgeLen = new NativeList<int>(tree.FlattenArr.Length, Allocator.Persistent);
+                    _edgeLen.ResizeUninitialized(tree.FlattenArr.Length);
+                    _edge2PtrLength = tree.FlattenArr.Length;
+                    offset = 0;
+                    
+                    int size = _edge2PtrLength * sizeof(NativeEdge*);
+                    _edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(
+                        size,
+                        sizeof(AlignOfHelper) - sizeof(NativeEdge*),
+                        Allocator.Persistent);
+                    
+                    
+                    UnsafeUtility.MemClear(_edge2Ptr, size);
+                }
+                else
+                {
+                    _edge2Ptr = ReAlloc2D(_edge2Ptr, _edge2PtrLength, _edge2PtrLength + tree.FlattenArr.Length,
+                        Allocator.Persistent, Allocator.Persistent);
+                    
+                    UnsafeUtility.MemClear(_edge2Ptr + _edge2PtrLength, sizeof(NativeEdge*) * tree.FlattenArr.Length);
+                        
+                    _edge2PtrLength += tree.FlattenArr.Length;
+                    Debug.Assert(_edgeLen.IsCreated);
+                    _edgeLen.ResizeUninitialized(_edge2PtrLength);
+                }
+                
+                
                 new Tree2GraphJob()
                 {
                     MyNodes = tree.FlattenArr,
-                    TargetArr = tree.FlattenArr,
-                    IndexArr = tree.IndexArr,
-                    TreeArr = tree.TreeArr,
-                    TargetTreeIndex = tree.TreeIndex,
-                    EdgeLen = edgeLenBuf,
-                    UnsafeEdge2dArr = edge2Ptr,
+                    MyTreeArr = tree.TreeArr,
+                    MyIndexArr = tree.IndexArr,
+                    TargetArr = targetTree.FlattenArr,
+                    TargetTreeArr = targetTree.TreeArr,
+                    TargetIndexArr = targetTree.IndexArr,
+                    TargetTreeIndex = targetTree.TreeIndex,
+                    EdgeLen = new NativeSlice<int>(_edgeLen.AsArray(), offset),
+                    UnsafeEdge2dArr = _edge2Ptr + offset,
                     AllocationStep = maxEdgeArrayLength, 
                 }.ScheduleBatch(tree.FlattenArr.Length, Mathf.CeilToInt(tree.FlattenArr.Length / (float)cpuCoreCount)).Complete();
             }
         }
 
+
+        
+        // 얕은 복사
+        public static unsafe NativeEdge** ReAlloc2D(NativeEdge** src, int srcLen, int targetLen, Allocator srcAllocator, Allocator targetAllocator)
+        {
+            int ptrSize = sizeof(NativeEdge*);
+            int ptrAlign = sizeof(AlignOfHelper) - sizeof(NativeEdge*);
+
+            NativeEdge** tempArr = (NativeEdge**)UnsafeUtility.Malloc((long)targetLen * ptrSize, ptrAlign, targetAllocator);
+
+            if (srcLen > 0 && src != null)
+            {
+                UnsafeUtility.MemCpy(tempArr, src, srcLen * ptrSize);
+            }
+
+            if (src != null)
+                UnsafeUtility.Free(src, srcAllocator);
+
+            return tempArr;
+        }
+        private unsafe struct AlignOfHelper
+        {
+            public byte dummy;
+            public unsafe NativeEdge* data;
+        }
+        
         public void Dispose()
         {
             _edgeLen.Dispose();

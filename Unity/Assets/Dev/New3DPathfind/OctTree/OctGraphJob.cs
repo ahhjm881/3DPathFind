@@ -16,13 +16,17 @@ namespace Candy.Pathfind3D
         [ReadOnly]
         public NativeArray<NativeOctNode> MyNodes;
         
+        [ReadOnly, NativeDisableParallelForRestriction]
+        public NativeArray<int> MyIndexArr;
+        [ReadOnly, NativeDisableParallelForRestriction]
+        public NativeArray<int> MyTreeArr;
+        
         [ReadOnly]
         public NativeArray<NativeOctNode> TargetArr;
-        
         [ReadOnly, NativeDisableParallelForRestriction]
-        public NativeArray<int> IndexArr;
+        public NativeArray<int> TargetIndexArr;
         [ReadOnly, NativeDisableParallelForRestriction]
-        public NativeArray<int> TreeArr;
+        public NativeArray<int> TargetTreeArr;
 
         public int TargetTreeIndex;
         
@@ -30,7 +34,7 @@ namespace Candy.Pathfind3D
         public NativeEdge** UnsafeEdge2dArr;
 
         [WriteOnly]
-        public NativeArray<int> EdgeLen;
+        public NativeSlice<int> EdgeLen;
 
         public int AllocationStep;
         
@@ -38,8 +42,8 @@ namespace Candy.Pathfind3D
         {
             NativeOctNode myNode = MyNodes[index];
             
-            NativeFlattenOctTree.IndexRange myIndexRage = NativeFlattenOctTree.GetChildIndexRange(myNode.FlattenIndex, IndexArr);
-            if (myNode.IsObstacle || NativeFlattenOctTree.HasChild(myIndexRage, TreeArr))
+            NativeFlattenOctTree.IndexRange myIndexRage = NativeFlattenOctTree.GetChildIndexRange(myNode.FlattenIndex, MyIndexArr);
+            if (myNode.IsObstacle || NativeFlattenOctTree.HasChild(myIndexRage, MyTreeArr))
             {
                 EdgeLen[index] = -1;
                 return;
@@ -97,12 +101,12 @@ namespace Candy.Pathfind3D
                     
                     if (myAABB.Overlaps(targetAABB))
                     {
-                        NativeFlattenOctTree.IndexRange targetIndexRage = NativeFlattenOctTree.GetChildIndexRange(targetNode.FlattenIndex, IndexArr);
-                        if (NativeFlattenOctTree.HasChild(targetIndexRage, TreeArr))
+                        NativeFlattenOctTree.IndexRange targetIndexRage = NativeFlattenOctTree.GetChildIndexRange(targetNode.FlattenIndex, TargetIndexArr);
+                        if (NativeFlattenOctTree.HasChild(targetIndexRage, TargetTreeArr))
                         {
                             for (int j = targetIndexRage.Begin; j < targetIndexRage.End; j++)
                             {
-                                int mapIndex = NativeFlattenOctTree.MapIndex(j, TreeArr);
+                                int mapIndex = NativeFlattenOctTree.MapIndex(j, TargetTreeArr);
                                 if(mapIndex == -1)continue;
                                 treeSearchArr = AddList(treeSearchArr, mapIndex, currentTreeSearchIndex++, &treeSearchCapacity);
                             }

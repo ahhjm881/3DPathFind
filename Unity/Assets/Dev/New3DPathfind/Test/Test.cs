@@ -28,8 +28,13 @@ namespace Candy.Pathfind3D
 
         private void Start()
         {
+            CreateSpace();
+            CreateGraph();
+        }
+
+        private void CreateSpace()
+        {
             _trees = new OctTree[Size.x, Size.y, Size.z];
-            
             Stopwatch w = new Stopwatch();
 
             Profiler.BeginSample("Init Common Buffer");
@@ -63,12 +68,12 @@ namespace Candy.Pathfind3D
 
             StringBuilder str = new();
             long[] sizes = new long[3];
-            str.AppendLine(NativeArrayMemoryTracker.GetMemoryUsageMessage(overlapBoxCommands, out sizes[0], "OverlapBoxCommand"));
-            str.AppendLine(NativeArrayMemoryTracker.GetMemoryUsageMessage(results, out sizes[1], "ColliderHit"));
-            str.AppendLine(NativeArrayMemoryTracker.GetMemoryUsageMessage(treeBuffer, out sizes[2], "Buffer"));
-            str.AppendLine($"Flatten Tree Avg size: {NativeArrayMemoryTracker.FormatBytes(totalFlattenTreeSize / _trees.Length)}");
-            str.AppendLine($"총 피크 메모리: {NativeArrayMemoryTracker.FormatBytes(sizes.Sum() + totalFlattenTreeSize)}");
-            str.AppendLine($"최종 메모리: {NativeArrayMemoryTracker.FormatBytes(totalFlattenTreeSize)}");
+            str.AppendLine(NativeUtility.GetMemoryUsageMessage(overlapBoxCommands, out sizes[0], "OverlapBoxCommand"));
+            str.AppendLine(NativeUtility.GetMemoryUsageMessage(results, out sizes[1], "ColliderHit"));
+            str.AppendLine(NativeUtility.GetMemoryUsageMessage(treeBuffer, out sizes[2], "Buffer"));
+            str.AppendLine($"Flatten Tree Avg size: {NativeUtility.FormatBytes(totalFlattenTreeSize / _trees.Length)}");
+            str.AppendLine($"총 피크 메모리: {NativeUtility.FormatBytes(sizes.Sum() + totalFlattenTreeSize)}");
+            str.AppendLine($"최종 메모리: {NativeUtility.FormatBytes(totalFlattenTreeSize)}");
             str.AppendLine($"걸린 시간: {w.ElapsedMilliseconds}ms");
             Debug.Log(str);
 
@@ -77,10 +82,38 @@ namespace Candy.Pathfind3D
             results.Dispose();
             treeBuffer.Dispose();
             Profiler.EndSample();
-            
+        }
+
+        private void CreateGraph()
+        {
             Profiler.BeginSample("Create Graph");
             _graph = new OctGraph();
-            _graph.Tree2Graph(_trees[0,0,0].NativeTree);
+
+            OctTreeNeighborIndexCalculator calculator = new(Size.x, Size.y, Size.z);
+            int[,] neighborCoords = new int[26, 3]; // [i, 0]=x, [i,1]=y, [i,2]=z
+
+            for (int x = 0; x < calculator.SizeX; x++)
+            {
+                for (int y = 0; y < calculator.SizeY; y++)
+                {
+                    for (int z = 0; z < calculator.SizeZ; z++)
+                    {
+                        _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[x, y, z].NativeTree);
+
+                        int count = calculator.GetNeighbors(x, y, z, neighborCoords);
+
+                        for (int i = 0; i < count; i++)
+                        {
+                            int nx = neighborCoords[i, 0];
+                            int ny = neighborCoords[i, 1];
+                            int nz = neighborCoords[i, 2];
+
+                            _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[nx, ny, nz].NativeTree);
+                        }
+                    }
+                }
+            }
+
             Profiler.EndSample();
         }
 

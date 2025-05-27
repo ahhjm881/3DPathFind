@@ -1,11 +1,29 @@
+using Unity.Mathematics;
+
 namespace Candy.Pathfind3D
 {
     using Unity.Collections;
     using Unity.Collections.LowLevel.Unsafe;
     using UnityEngine;
 
-    public static class NativeArrayMemoryTracker
+    public static class NativeUtility
     {
+        public static unsafe T* ReAlloc<T>(T* src, int srcLen, int targetLen, Allocator srcAllocator,
+            Allocator targetAllocator)
+            where T : unmanaged
+        {
+            int typeSize = UnsafeUtility.SizeOf<T>();
+            int alignment = UnsafeUtility.AlignOf<T>();
+            T* tempArr = (T*)UnsafeUtility.Malloc((long)targetLen * typeSize, alignment, targetAllocator);
+
+            if (srcLen > 0)
+                UnsafeUtility.MemCpy(tempArr, src, srcLen * typeSize);
+
+            UnsafeUtility.Free(src, srcAllocator);
+
+            return tempArr;
+        }
+
         /// <summary>
         /// NativeArray가 사용하는 총 메모리 크기를 byte 단위로 반환합니다.
         /// </summary>
@@ -27,11 +45,12 @@ namespace Candy.Pathfind3D
             long sizeInBytes = GetMemorySizeBytes(array);
             Debug.Log($"{arrayName} 메모리 사용량: {FormatBytes(sizeInBytes)} ({sizeInBytes} bytes)");
         }
-        
+
         /// <summary>
         /// NativeArray의 메모리 사용량 로그를 string으로 반환
         /// </summary>
-        public static string GetMemoryUsageMessage<T>(NativeArray<T> array, out long sizeInBytes, string arrayName = "NativeArray") where T : struct
+        public static string GetMemoryUsageMessage<T>(NativeArray<T> array, out long sizeInBytes,
+            string arrayName = "NativeArray") where T : struct
         {
             sizeInBytes = GetMemorySizeBytes(array);
             return $"{arrayName} 메모리 사용량: {FormatBytes(sizeInBytes)} ({sizeInBytes} bytes)";
