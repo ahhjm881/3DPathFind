@@ -24,6 +24,7 @@ namespace Candy.Pathfind3D
         [SerializeField] private OctTree.InitParameter _param;
 
         private OctTree[,,] _trees;
+        private (int x, int y, int z)[] _treeIndices;
         private OctGraph _graph;
 
         private void Start()
@@ -35,6 +36,7 @@ namespace Candy.Pathfind3D
         private void CreateSpace()
         {
             _trees = new OctTree[Size.x, Size.y, Size.z];
+            _treeIndices = new (int, int, int)[Size.x * Size.y * Size.z];
             Stopwatch w = new Stopwatch();
 
             Profiler.BeginSample("Init Common Buffer");
@@ -60,6 +62,7 @@ namespace Candy.Pathfind3D
                         tree.CreateSpace(overlapBoxCommands, results, treeBuffer);
                         totalFlattenTreeSize += tree.NativeTree.Size;
                         _trees[i, j, k] = tree;
+                        _treeIndices[treeIndex - 1] = (i, j, k);
                     }
                 }
             }
@@ -86,11 +89,15 @@ namespace Candy.Pathfind3D
 
         private void CreateGraph()
         {
+            Stopwatch w = new Stopwatch();
+            w.Start();
+            
             Profiler.BeginSample("Create Graph");
             _graph = new OctGraph();
 
             OctTreeNeighborIndexCalculator calculator = new(Size.x, Size.y, Size.z);
             int[,] neighborCoords = new int[26, 3]; // [i, 0]=x, [i,1]=y, [i,2]=z
+            long size = 0;
 
             for (int x = 0; x < calculator.SizeX; x++)
             {
@@ -110,11 +117,17 @@ namespace Candy.Pathfind3D
 
                             _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[nx, ny, nz].NativeTree);
                         }
+
+                        size += _graph.TotalSize;
                     }
                 }
             }
-
+            w.Stop();
             Profiler.EndSample();
+            
+            Debug.Log($"====");
+            Debug.Log($"Graph 생성 소요 시간: {w.ElapsedMilliseconds}ms");
+            Debug.Log($"Graph 메모리 사용량: {NativeUtility.FormatBytes(size)}");
         }
 
         private void OnDestroy()
@@ -215,7 +228,13 @@ namespace Candy.Pathfind3D
                     NativeEdge edge = _graph.GetEdge(i, j);
                     
                     Gizmos.color = Color.yellow;
-                    Gizmos.DrawLine(edge.DEBUG_POINT_START, edge.DEBUG_POINT_END);
+
+                    var fromTreeXYZ = _treeIndices[edge.PrevTreeIndex];
+                    var toTreeXYZ = _treeIndices[edge.NextTreeIndex];
+                    NativeOctNode fromNode = _trees[fromTreeXYZ.x, fromTreeXYZ.y, fromTreeXYZ.z].NativeTree.GetNode(edge.PrevNodeFlattenIndex);
+                    NativeOctNode toNode = _trees[toTreeXYZ.x, toTreeXYZ.y, toTreeXYZ.z].NativeTree.GetNode(edge.NextNodeFlattenIndex);
+
+                    Gizmos.DrawLine(fromNode.WorldPosition,toNode.WorldPosition);
                 }
             }
         }

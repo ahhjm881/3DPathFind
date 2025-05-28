@@ -29,6 +29,7 @@ namespace Candy.Pathfind3D
         public NativeArray<int> TargetTreeArr;
 
         public int TargetTreeIndex;
+        public int MyTreeIndex;
         
         [NativeDisableUnsafePtrRestriction]
         public NativeEdge** UnsafeEdge2dArr;
@@ -95,6 +96,7 @@ namespace Candy.Pathfind3D
                     Debug.Assert(i < swapSearchCapacity, $"{i}, {swapSearchCapacity}, {len}");
                     int targetIndex = swapSearchArr[i];
                     NativeOctNode targetNode = TargetArr[targetIndex];
+
                     
                     MinMaxAABB targetAABB =
                         MinMaxAABB.CreateFromCenterAndExtents(targetNode.WorldPosition, targetNode.Scale * new float3(1f, 1f, 1f));
@@ -119,12 +121,14 @@ namespace Candy.Pathfind3D
                         NativeEdge edge = new NativeEdge()
                         {
                             Weight = distance,
-                            TreeIndex = TargetTreeIndex,
-                            NodeFlattenIndex = targetNode.FlattenIndex,
+                            PrevTreeIndex = MyTreeIndex,
+                            NextTreeIndex = TargetTreeIndex,
+                            PrevNodeFlattenIndex = myNode.FlattenIndex,
+                            NextNodeFlattenIndex = targetNode.FlattenIndex,
 
                             // Test
-                            DEBUG_POINT_START = myAABB.Center,
-                            DEBUG_POINT_END = targetAABB.Center,
+                            //DEBUG_POINT_START = myAABB.Center,
+                            //DEBUG_POINT_END = targetAABB.Center,
                         };
                         
                         edgeArr = AddList(edgeArr, edge, currentEdgeIndex++, &edgeArrCapacity);

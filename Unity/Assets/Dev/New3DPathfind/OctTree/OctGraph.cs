@@ -17,6 +17,8 @@ namespace Candy.Pathfind3D
 
         public int EdgeArrLength => _edge2PtrLength;
 
+        public long TotalSize { get; private set; }
+
         public bool IsCreated
         {
             get
@@ -126,10 +128,29 @@ namespace Candy.Pathfind3D
                     TargetTreeArr = targetTree.TreeArr,
                     TargetIndexArr = targetTree.IndexArr,
                     TargetTreeIndex = targetTree.TreeIndex,
+MyTreeIndex                    = tree.TreeIndex,
                     EdgeLen = new NativeSlice<int>(_edgeLen.AsArray(), offset),
                     UnsafeEdge2dArr = _edge2Ptr + offset,
                     AllocationStep = maxEdgeArrayLength, 
                 }.ScheduleBatch(tree.FlattenArr.Length, Mathf.CeilToInt(tree.FlattenArr.Length / (float)cpuCoreCount)).Complete();
+
+
+                try
+                {
+                    checked
+                    {
+                        long size = sizeof(NativeEdge*) + sizeof(NativeEdge) * EdgeArrLength;
+                        size += sizeof(int) + _edgeLen.Length;
+                        size += sizeof(int);
+
+                        TotalSize = size;
+                    }
+                }
+                catch (OverflowException e)
+                {
+                    TotalSize = 0;
+                    Debug.LogException(e);
+                }
             }
         }
 
