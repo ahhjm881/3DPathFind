@@ -18,9 +18,9 @@ namespace Candy.Pathfind3D
             public int MinDepth;
             public int MaxDepth;
             public float Scale;
-            
+
             [NonSerialized] public float3 WorldPosition;
-            
+
             public InitParameter(int minDepth, int maxDepth, float scale, float3 worldPosition)
             {
                 MinDepth = minDepth;
@@ -62,7 +62,7 @@ namespace Candy.Pathfind3D
             d += IntPow8(depth - 1);
 
             return d;*/
-            
+
             for (int i = 0; i <= depth; i++)
             {
                 d += IntPow8(i);
@@ -84,34 +84,46 @@ namespace Candy.Pathfind3D
             return d;
         }
 
-        public void CreateSpace(NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results, NativeArray<NativeOctNode> treeBuffer)
+        public void CreateSpace(NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results,
+            NativeArray<NativeOctNode> treeBuffer)
         {
             NativeArray<NativeOctNode> arrayTree = Divide(overlapBoxCommands, results, treeBuffer);
-            (NativeArray<NativeOctNode> flattenArr, NativeArray<int> indexArr, NativeArray<int> treeArr) = ToFlatten(arrayTree);
+            (NativeArray<NativeOctNode> flattenArr, NativeArray<int> indexArr, NativeArray<int> treeArr) =
+                ToFlatten(arrayTree);
 
-            NativeTree = new NativeFlattenOctTree()
+            unsafe
             {
-                FlattenArr = flattenArr,
-                IndexArr = indexArr,
-                TreeArr = treeArr,
-                Depth = Parameter.MaxDepth,
-                TreeIndex = TreeIndex
-            };
+                NativeTree = new NativeFlattenOctTree()
+                {
+                    FlattenArr = flattenArr,
+                    IndexArr = indexArr,
+                    TreeArr = treeArr,
+
+                    FlattenPtr = (NativeOctNode*)flattenArr.GetUnsafeReadOnlyPtr(),
+                    IndexPtr = (int*)indexArr.GetUnsafeReadOnlyPtr(),
+                    TreePtr = (int*)treeArr.GetUnsafeReadOnlyPtr(),
+
+                    Depth = Parameter.MaxDepth,
+                    TreeIndex = TreeIndex
+                };
+            }
         }
 
-        public static (NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results) CreatePhysicsBuffer(InitParameter parameter)
+        public static (NativeArray<OverlapBoxCommand> overlapBoxCommands, NativeArray<ColliderHit> results)
+            CreatePhysicsBuffer(InitParameter parameter)
         {
             Profiler.BeginSample("Physics buffer");
             int len = GetMaxOctNodeArrayLength(parameter);
             NativeArray<OverlapBoxCommand> commands = new NativeArray<OverlapBoxCommand>(len, Allocator.TempJob);
             NativeArray<ColliderHit> results = new NativeArray<ColliderHit>(len, Allocator.TempJob);
             Profiler.EndSample();
-            
+
             return (commands, results);
         }
+
         public static NativeArray<NativeOctNode> CreateTreeBuffer(InitParameter parameter)
         {
-            Profiler.BeginSample("Tree buffer"); 
+            Profiler.BeginSample("Tree buffer");
             int len = GetMaxOctNodeArrayLength(parameter);
             NativeArray<NativeOctNode> treeBuffer = new NativeArray<NativeOctNode>(len, Allocator.TempJob);
             Profiler.EndSample();
@@ -119,21 +131,22 @@ namespace Candy.Pathfind3D
             return treeBuffer;
         }
 
-        public NativeArray<NativeOctNode> Divide(NativeArray<OverlapBoxCommand> commands, NativeArray<ColliderHit> results, NativeArray<NativeOctNode> treeBuffer)
+        public NativeArray<NativeOctNode> Divide(NativeArray<OverlapBoxCommand> commands,
+            NativeArray<ColliderHit> results, NativeArray<NativeOctNode> treeBuffer)
         {
             int cpuCount = 32;
 
             Profiler.BeginSample("Ready Array");
-            Profiler.BeginSample("Clear buffer"); 
+            Profiler.BeginSample("Clear buffer");
             new OctNodeClearJob()
             {
                 Nodes = treeBuffer
             }.Schedule(MaxOctNodeArrayLength, MaxOctNodeArrayLength / cpuCount).Complete();
-            
+
             Profiler.EndSample();
-            treeBuffer[0] =  new NativeOctNode(0, true, 0, Parameter.Scale, true, Parameter.WorldPosition);
-            
-            Profiler.BeginSample("Direction Buffer"); 
+            treeBuffer[0] = new NativeOctNode(0, true, 0, Parameter.Scale, true, Parameter.WorldPosition);
+
+            Profiler.BeginSample("Direction Buffer");
             float3 oneVector = new float3(1f, 1f, 1f);
             using NativeArray<float3> directionVectorArray = new NativeArray<float3>(new float3[]
             {
@@ -147,7 +160,7 @@ namespace Candy.Pathfind3D
                 math.mul(quaternion.Euler(0f, 180f * math.TORADIANS, 0f), -oneVector * 0.5f),
                 math.mul(quaternion.Euler(0f, 270f * math.TORADIANS, 0f), -oneVector * 0.5f),
             }, Allocator.TempJob);
-            
+
             Profiler.EndSample();
             Profiler.EndSample();
 
@@ -169,22 +182,24 @@ namespace Candy.Pathfind3D
                     Commands = commands
                 };
                 divideJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
-                
+
                 Profiler.EndSample();
                 Profiler.EndSample();
 
-                 Profiler.BeginSample("OverlapBox Job"); 
+                Profiler.BeginSample("OverlapBox Job");
                 unsafe
                 {
-                    NativeArray<OverlapBoxCommand> commandsView = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OverlapBoxCommand>(
-                        (byte*)commands.GetUnsafePtr(),
-                        currentDepthNodeCount,
-                        Allocator.None);
-                    NativeArray<ColliderHit> resultsView = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<ColliderHit>(
-                        (byte*)results.GetUnsafePtr(),
-                        currentDepthNodeCount,
-                        Allocator.None);
-                    
+                    NativeArray<OverlapBoxCommand> commandsView =
+                        NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<OverlapBoxCommand>(
+                            (byte*)commands.GetUnsafePtr(),
+                            currentDepthNodeCount,
+                            Allocator.None);
+                    NativeArray<ColliderHit> resultsView =
+                        NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<ColliderHit>(
+                            (byte*)results.GetUnsafePtr(),
+                            currentDepthNodeCount,
+                            Allocator.None);
+
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
                     AtomicSafetyHandle safetyHandle = AtomicSafetyHandle.Create();
                     safetyHandle = AtomicSafetyHandle.Create();
@@ -192,23 +207,26 @@ namespace Candy.Pathfind3D
                     safetyHandle = AtomicSafetyHandle.Create();
                     NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref resultsView, safetyHandle);
 #endif
-                    OverlapBoxCommand.ScheduleBatch(commandsView, resultsView, commandsView.Length / cpuCount, 1).Complete();
+                    OverlapBoxCommand.ScheduleBatch(commandsView, resultsView, commandsView.Length / cpuCount, 1)
+                        .Complete();
                 }
+
                 Profiler.EndSample();
 
-                Profiler.BeginSample("Obstacle Job"); 
+                Profiler.BeginSample("Obstacle Job");
                 unsafe
                 {
-                    NativeArray<NativeOctNode> output = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<NativeOctNode>(
-                        (byte*)treeBuffer.GetUnsafePtr() + sizeof(NativeOctNode) * beforeDepthNodeCount,
-                        currentDepthNodeCount,
-                        Allocator.None);
-                    
+                    NativeArray<NativeOctNode> output =
+                        NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<NativeOctNode>(
+                            (byte*)treeBuffer.GetUnsafePtr() + sizeof(NativeOctNode) * beforeDepthNodeCount,
+                            currentDepthNodeCount,
+                            Allocator.None);
+
 #if ENABLE_UNITY_COLLECTIONS_CHECKS
                     var safetyHandle = AtomicSafetyHandle.Create();
                     NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref output, safetyHandle);
 #endif
-                    
+
                     OctNodeSetObstacleJob setObstacleJob = new OctNodeSetObstacleJob()
                     {
                         Nodes = output,
@@ -216,19 +234,20 @@ namespace Candy.Pathfind3D
                     };
                     setObstacleJob.Schedule(currentDepthNodeCount, currentDepthNodeCount / cpuCount).Complete();
                 }
-                
+
                 Profiler.EndSample();
-            } 
+            }
 
             return treeBuffer;
         }
 
-        private (NativeArray<NativeOctNode> flattenArr, NativeArray<int> indexArr, NativeArray<int> treeArr) ToFlatten(NativeArray<NativeOctNode> nonFlattenArray)
+        private (NativeArray<NativeOctNode> flattenArr, NativeArray<int> indexArr, NativeArray<int> treeArr) ToFlatten(
+            NativeArray<NativeOctNode> nonFlattenArray)
         {
             Profiler.BeginSample("Flatten");
             using NativeArray<int> flattenCountResult = new NativeArray<int>(1, Allocator.TempJob);
             using NativeArray<int> indexTargetResult = new NativeArray<int>(1, Allocator.TempJob);
-            
+
             Profiler.BeginSample("Counting");
             OctNodeFlattenCountingJob countJob = new OctNodeFlattenCountingJob()
             {
@@ -238,16 +257,17 @@ namespace Candy.Pathfind3D
             };
             countJob.Schedule().Complete();
             Profiler.EndSample();
-            
+
             int indexTargetArrLength = indexTargetResult[0];
             int flattenArrLength = flattenCountResult[0];
-            
+
             Profiler.BeginSample("Init Buffer");
             NativeArray<int> mapperIndexArr = new NativeArray<int>(flattenArrLength, Allocator.Persistent);
             NativeArray<int> mapperTargetArr = new NativeArray<int>(indexTargetArrLength, Allocator.Persistent);
-            NativeArray<NativeOctNode> flattenArr = new NativeArray<NativeOctNode>(flattenArrLength, Allocator.Persistent);
+            NativeArray<NativeOctNode> flattenArr =
+                new NativeArray<NativeOctNode>(flattenArrLength, Allocator.Persistent);
             Profiler.EndSample();
-            
+
             Profiler.BeginSample("First Job");
             OctNodeFlattenFirstJob firstFlattenJob = new OctNodeFlattenFirstJob()
             {
@@ -269,7 +289,7 @@ namespace Candy.Pathfind3D
             };
             secondFlattenJob.Schedule().Complete();
             Profiler.EndSample();
-            
+
             Profiler.EndSample();
 
             return (flattenArr, mapperIndexArr, mapperTargetArr);

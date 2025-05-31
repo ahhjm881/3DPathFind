@@ -1,5 +1,8 @@
 using System;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Mathematics;
+using Unity.Mathematics.Geometry;
 
 namespace Candy.Pathfind3D
 {
@@ -22,9 +25,17 @@ namespace Candy.Pathfind3D
             }
         }
         
+        [NativeDisableContainerSafetyRestriction]
         public NativeArray<NativeOctNode> FlattenArr;
+        [NativeDisableContainerSafetyRestriction]
         public NativeArray<int> IndexArr;
+        [NativeDisableContainerSafetyRestriction]
         public NativeArray<int> TreeArr;
+
+        public unsafe NativeOctNode* FlattenPtr;
+        public unsafe int* IndexPtr;
+        public unsafe int* TreePtr;
+
 
         public int Depth;
         public int TreeIndex;
@@ -63,7 +74,67 @@ namespace Candy.Pathfind3D
 
         public int RootIndex => 0;
 
-        public NativeOctNode GetNode(int index, NativeArray<NativeOctNode> flattenArr)
+        public static int FindLeafNodeIndex(float3 position, float3 size ,NativeArray<NativeOctNode> flattenArr, NativeArray<int> treeArr, NativeArray<int> indexArr, NativeList<int> tempBuffer0, NativeList<int> tempBuffer1)
+        {
+            MinMaxAABB myAABB = MinMaxAABB.CreateFromCenterAndExtents(position , size);
+            tempBuffer0.Clear();
+            tempBuffer1.Clear();
+            
+            // root index
+            tempBuffer0.Add(0);
+
+            while (true)
+            {
+                int len = tempBuffer0.Length;
+                tempBuffer1.Clear();
+                if (len < 1)
+                {
+                    return -1;
+                }
+
+                for (int i = 0; i < len; i++)
+                {
+                    int targetIndex = tempBuffer0[i];
+                    NativeOctNode targetNode = flattenArr[targetIndex];
+
+
+                    MinMaxAABB targetAABB =
+                        MinMaxAABB.CreateFromCenterAndExtents(targetNode.WorldPosition,
+                            targetNode.Scale * new float3(1f, 1f, 1f));
+
+                    if (targetAABB.Contains(myAABB.Center))
+                    {
+                        IndexRange targetIndexRage = GetChildIndexRange(targetNode.FlattenIndex, indexArr);
+                        
+                        if (targetNode.IsObstacle == false && targetIndexRage.IsValid() == false)
+                            return targetNode.FlattenIndex;
+                        
+                        if (HasChild(targetIndexRage, treeArr))
+                        {
+                            for (int j = targetIndexRage.Begin; j < targetIndexRage.End; j++)
+                            {
+                                int mapIndex = MapIndex(j, treeArr);
+                                if (mapIndex == -1) continue;
+                                tempBuffer1.Add(mapIndex);
+                            }
+
+                            continue;
+                        }
+
+
+                        if (targetNode.IsObstacle) continue;
+                        return targetNode.FlattenIndex;
+
+                    }
+                }
+
+                var tempArr = tempBuffer0;
+                tempBuffer0 = tempBuffer1;
+                tempBuffer1 = tempArr;
+            }
+        }
+
+        public NativeOctNode GetNode(int index,NativeArray<NativeOctNode> flattenArr)
         {
             if (index < 0)
             {

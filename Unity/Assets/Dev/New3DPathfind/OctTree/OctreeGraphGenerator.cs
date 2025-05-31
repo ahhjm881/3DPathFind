@@ -15,22 +15,26 @@ using Debug = UnityEngine.Debug;
 namespace Candy.Pathfind3D
 {
 
-    public class Test : MonoBehaviour
+    public class OctreeGraphGenerator : MonoBehaviour
     {
         public Vector3Int Size;
         public bool IsDrawNode;
         public bool IsDrawEdge;
-
+ 
+        
         [SerializeField] private OctTree.InitParameter _param;
 
         private OctTree[,,] _trees;
         private (int x, int y, int z)[] _treeIndices;
         private OctGraph _graph;
 
+        public NativeOctGraph NativeOctGraph => _graph.NativeGraph;
+        public NativeOctTree3D NativeOctTree3D { get; private set; }
+
         private void Start()
         {
             CreateSpace();
-            CreateGraph();
+            CreateGraph(); 
         }
 
         private void CreateSpace()
@@ -85,6 +89,8 @@ namespace Candy.Pathfind3D
             results.Dispose();
             treeBuffer.Dispose();
             Profiler.EndSample();
+
+            NativeOctTree3D = new NativeOctTree3D(transform.position + Vector3.one * _param.Scale * 0.5f, _param.Scale, _trees, Size, Allocator.Persistent);
         }
 
         private void CreateGraph()
@@ -98,6 +104,7 @@ namespace Candy.Pathfind3D
             OctTreeNeighborIndexCalculator calculator = new(Size.x, Size.y, Size.z);
             int[,] neighborCoords = new int[26, 3]; // [i, 0]=x, [i,1]=y, [i,2]=z
             long size = 0;
+            int b = 0;
 
             for (int x = 0; x < calculator.SizeX; x++)
             {
@@ -105,7 +112,7 @@ namespace Candy.Pathfind3D
                 {
                     for (int z = 0; z < calculator.SizeZ; z++)
                     {
-                        _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[x, y, z].NativeTree);
+                        _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[x, y, z].NativeTree, Size.x * Size.y * Size.z);
 
                         int count = calculator.GetNeighbors(x, y, z, neighborCoords);
 
@@ -115,8 +122,10 @@ namespace Candy.Pathfind3D
                             int ny = neighborCoords[i, 1];
                             int nz = neighborCoords[i, 2];
 
-                            _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[nx, ny, nz].NativeTree);
+                            _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[nx, ny, nz].NativeTree, Size.x * Size.y * Size.z);
                         }
+
+                        _graph.NativeGraph.EdgeTreeOffset[_trees[x, y, z].NativeTree.TreeIndex] = (b += _trees[x, y, z].NativeTree.FlattenArr.Length);
 
                         size += _graph.TotalSize;
                     }
@@ -132,21 +141,10 @@ namespace Candy.Pathfind3D
 
         private void OnDestroy()
         {
-            if (_trees is null) return;
-
-            for (int i = 0; i < Size.x; i++)
-            {
-                for (int j = 0; j < Size.y; j++)
-                {
-                    for (int k = 0; k < Size.z; k++)
-                    {
-                        _trees[i, j, k].Dispose();
-                    }
-                }
-            }
-
+            NativeOctTree3D.Dispose();
             _trees = null;
             
+            NativeOctGraph.Dispose();
             _graph.Dispose();
             _graph = null;
         }
@@ -220,7 +218,7 @@ namespace Candy.Pathfind3D
             if (IsDrawEdge is false) return;
             
             if (_graph.IsCreated is false) return;
-            
+
             for (int i = 0; i < _graph.EdgeArrLength; i++)
             {
                 for (int j = 0; j < _graph.EdgeLen[i]; j++)
@@ -233,7 +231,6 @@ namespace Candy.Pathfind3D
                     var toTreeXYZ = _treeIndices[edge.NextTreeIndex];
                     NativeOctNode fromNode = _trees[fromTreeXYZ.x, fromTreeXYZ.y, fromTreeXYZ.z].NativeTree.GetNode(edge.PrevNodeFlattenIndex);
                     NativeOctNode toNode = _trees[toTreeXYZ.x, toTreeXYZ.y, toTreeXYZ.z].NativeTree.GetNode(edge.NextNodeFlattenIndex);
-
                     Gizmos.DrawLine(fromNode.WorldPosition,toNode.WorldPosition);
                 }
             }

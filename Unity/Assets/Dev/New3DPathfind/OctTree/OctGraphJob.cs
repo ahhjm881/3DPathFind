@@ -51,7 +51,7 @@ namespace Candy.Pathfind3D
             }
             
             MinMaxAABB myAABB =
-                MinMaxAABB.CreateFromCenterAndExtents(myNode.WorldPosition, myNode.Scale * 1.01f * new float3(1f, 1f, 1f));
+                MinMaxAABB.CreateFromCenterAndExtents(myNode.WorldPosition, myNode.Scale * 1.5f * new float3(1f, 1f, 1f));
 
             NativeEdge* edgeArr = (NativeEdge*)UnsafeUtility.Malloc(
                 AllocationStep * UnsafeUtility.SizeOf<NativeEdge>(), 
@@ -125,10 +125,6 @@ namespace Candy.Pathfind3D
                             NextTreeIndex = TargetTreeIndex,
                             PrevNodeFlattenIndex = myNode.FlattenIndex,
                             NextNodeFlattenIndex = targetNode.FlattenIndex,
-
-                            // Test
-                            //DEBUG_POINT_START = myAABB.Center,
-                            //DEBUG_POINT_END = targetAABB.Center,
                         };
                         
                         edgeArr = AddList(edgeArr, edge, currentEdgeIndex++, &edgeArrCapacity);

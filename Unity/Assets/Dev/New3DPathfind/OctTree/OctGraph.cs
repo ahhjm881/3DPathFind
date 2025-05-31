@@ -7,119 +7,132 @@ using UnityEngine;
 
 namespace Candy.Pathfind3D
 {
+    public struct NativeOctGraph : IDisposable
+    {
+        [NativeDisableUnsafePtrRestriction]
+        public unsafe NativeEdge** Edge2Ptr;
+        
+        [ReadOnly]
+        public NativeList<int> EdgeLen;
+        public int Edge2PtrLength;
+
+        public NativeArray<int> EdgeTreeOffset;
+        
+        public NativeEdge GetEdge(int nodeIndex, int edgeIndex)
+        {
+            if (nodeIndex < 0 || nodeIndex >= Edge2PtrLength)
+                throw new IndexOutOfRangeException();
+
+            if (edgeIndex < 0 || edgeIndex >= EdgeLen[nodeIndex])
+                throw new IndexOutOfRangeException($"index:{edgeIndex}, max len:{EdgeLen[nodeIndex]}");
+
+            unsafe
+            {
+                NativeEdge* edges = Edge2Ptr[nodeIndex];
+                return edges[edgeIndex];
+            }
+        }
+
+        public void Dispose()
+        {
+            EdgeLen.Dispose();
+
+            unsafe
+            {
+                if (Edge2Ptr != null)
+                {
+                    for (int i = 0; i < Edge2PtrLength; i++)
+                    {
+                        if (Edge2Ptr[i] != null)
+                        {
+                            UnsafeUtility.Free(Edge2Ptr[i], Allocator.Persistent);
+                        }
+                    }
+
+                    UnsafeUtility.Free(Edge2Ptr, Allocator.Persistent);
+                }
+
+                Edge2Ptr = null;
+            }
+        }
+    }
+
     public class OctGraph : IDisposable
     {
-        private unsafe NativeEdge** _edge2Ptr;
-        private NativeList<int> _edgeLen;
-        private int _edge2PtrLength;
+        public NativeOctGraph NativeGraph;
 
-        public NativeArray<int> EdgeLen => _edgeLen.AsArray();
-
-        public int EdgeArrLength => _edge2PtrLength;
-
+        public NativeArray<int> EdgeLen => NativeGraph.EdgeLen.AsArray();
+        public int EdgeArrLength => NativeGraph.Edge2PtrLength;
         public long TotalSize { get; private set; }
 
         public bool IsCreated
         {
             get
             {
-                bool r = false;
-                unsafe
-                {
-                    r = _edge2Ptr != null;
-                }
-
-                return r;
+                unsafe { return NativeGraph.Edge2Ptr != null; }
             }
         }
 
         public NativeEdge GetEdge(int nodeIndex, int edgeIndex)
         {
-            if (nodeIndex < 0 || nodeIndex >= _edge2PtrLength)
-            {
+            if (nodeIndex < 0 || nodeIndex >= NativeGraph.Edge2PtrLength)
                 throw new IndexOutOfRangeException();
-            }
 
-            if (edgeIndex < 0 || edgeIndex >= _edgeLen[nodeIndex])
-            {
-                throw new IndexOutOfRangeException($"index:{edgeIndex}, max len:{_edgeLen[nodeIndex]}");
-            }
+            if (edgeIndex < 0 || edgeIndex >= NativeGraph.EdgeLen[nodeIndex])
+                throw new IndexOutOfRangeException($"index:{edgeIndex}, max len:{NativeGraph.EdgeLen[nodeIndex]}");
 
-            NativeEdge edge;
             unsafe
             {
-                NativeEdge* edges = _edge2Ptr[nodeIndex];
-                edge = edges[edgeIndex];
+                NativeEdge* edges = NativeGraph.Edge2Ptr[nodeIndex];
+                return edges[edgeIndex];
             }
-
-            return edge;
         }
 
         public OctGraph()
         {
-            _edge2PtrLength = 0;
-
-            unsafe
-            {
-                _edge2Ptr = null;
-            }
+            NativeGraph.Edge2PtrLength = 0;
+            unsafe { NativeGraph.Edge2Ptr = null; }
         }
-
 
         public static int CalculateMaxEdgeArrayLength(int depth)
         {
             int lineNodeCount = IntegerMath.CubeRootOf8(depth);
             int faceNodeCount = lineNodeCount * lineNodeCount;
-
-            // 정육면체 기준
-            // 면 6개, 기둥(면의 선) 8개, 모서리 8개
-            int totalNodeCount = (6 * faceNodeCount) + (8 * lineNodeCount) + 8;
-
-            return totalNodeCount;
+            return (6 * faceNodeCount) + (8 * lineNodeCount) + 8;
         }
 
-        public void Tree2Graph(NativeFlattenOctTree tree, NativeFlattenOctTree targetTree)
+        public void Tree2Graph(NativeFlattenOctTree tree, NativeFlattenOctTree targetTree, int treeCount)
         {
             int cpuCoreCount = 32;
-
             int maxEdgeArrayLength = IntegerMath.CubeRootOf8(tree.Depth);
-
 
             unsafe
             {
-                int offset = _edge2PtrLength;
-                
-                if (_edge2Ptr == null)
+                int offset = NativeGraph.Edge2PtrLength;
+
+                if (NativeGraph.Edge2Ptr == null)
                 {
-                    Debug.Assert(_edgeLen.IsCreated is false);
-                    _edgeLen = new NativeList<int>(tree.FlattenArr.Length, Allocator.Persistent);
-                    _edgeLen.ResizeUninitialized(tree.FlattenArr.Length);
-                    _edge2PtrLength = tree.FlattenArr.Length;
+                    Debug.Assert(!NativeGraph.EdgeLen.IsCreated);
+                    NativeGraph.EdgeLen = new NativeList<int>(tree.FlattenArr.Length, Allocator.Persistent);
+                    NativeGraph.EdgeLen.ResizeUninitialized(tree.FlattenArr.Length);
+                    NativeGraph.Edge2PtrLength = tree.FlattenArr.Length;
+                    NativeGraph.EdgeTreeOffset = new NativeArray<int>(treeCount, Allocator.Persistent);
                     offset = 0;
-                    
-                    int size = _edge2PtrLength * sizeof(NativeEdge*);
-                    _edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(
-                        size,
-                        sizeof(AlignOfHelper) - sizeof(NativeEdge*),
-                        Allocator.Persistent);
-                    
-                    
-                    UnsafeUtility.MemClear(_edge2Ptr, size);
+
+                    int size = NativeGraph.Edge2PtrLength * sizeof(NativeEdge*);
+                    NativeGraph.Edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(size, sizeof(AlignOfHelper) - sizeof(NativeEdge*), Allocator.Persistent);
+                    UnsafeUtility.MemClear(NativeGraph.Edge2Ptr, size);
                 }
                 else
                 {
-                    _edge2Ptr = ReAlloc2D(_edge2Ptr, _edge2PtrLength, _edge2PtrLength + tree.FlattenArr.Length,
-                        Allocator.Persistent, Allocator.Persistent);
-                    
-                    UnsafeUtility.MemClear(_edge2Ptr + _edge2PtrLength, sizeof(NativeEdge*) * tree.FlattenArr.Length);
-                        
-                    _edge2PtrLength += tree.FlattenArr.Length;
-                    Debug.Assert(_edgeLen.IsCreated);
-                    _edgeLen.ResizeUninitialized(_edge2PtrLength);
+                    NativeGraph.Edge2Ptr = ReAlloc2D(NativeGraph.Edge2Ptr, NativeGraph.Edge2PtrLength, NativeGraph.Edge2PtrLength + tree.FlattenArr.Length, Allocator.Persistent, Allocator.Persistent);
+                    UnsafeUtility.MemClear(NativeGraph.Edge2Ptr + NativeGraph.Edge2PtrLength, sizeof(NativeEdge*) * tree.FlattenArr.Length);
+                    NativeGraph.Edge2PtrLength += tree.FlattenArr.Length;
+                    Debug.Assert(NativeGraph.EdgeLen.IsCreated);
+                    NativeGraph.EdgeLen.ResizeUninitialized(NativeGraph.Edge2PtrLength);
                 }
-                
-                
-                new Tree2GraphJob()
+
+                new Tree2GraphJob
                 {
                     MyNodes = tree.FlattenArr,
                     MyTreeArr = tree.TreeArr,
@@ -128,21 +141,19 @@ namespace Candy.Pathfind3D
                     TargetTreeArr = targetTree.TreeArr,
                     TargetIndexArr = targetTree.IndexArr,
                     TargetTreeIndex = targetTree.TreeIndex,
-MyTreeIndex                    = tree.TreeIndex,
-                    EdgeLen = new NativeSlice<int>(_edgeLen.AsArray(), offset),
-                    UnsafeEdge2dArr = _edge2Ptr + offset,
-                    AllocationStep = maxEdgeArrayLength, 
+                    MyTreeIndex = tree.TreeIndex,
+                    EdgeLen = new NativeSlice<int>(NativeGraph.EdgeLen.AsArray(), offset),
+                    UnsafeEdge2dArr = NativeGraph.Edge2Ptr + offset,
+                    AllocationStep = maxEdgeArrayLength
                 }.ScheduleBatch(tree.FlattenArr.Length, Mathf.CeilToInt(tree.FlattenArr.Length / (float)cpuCoreCount)).Complete();
-
-
+                
                 try
                 {
                     checked
                     {
                         long size = sizeof(NativeEdge*) + sizeof(NativeEdge) * EdgeArrLength;
-                        size += sizeof(int) + _edgeLen.Length;
+                        size += sizeof(int) + NativeGraph.EdgeLen.Length;
                         size += sizeof(int);
-
                         TotalSize = size;
                     }
                 }
@@ -154,53 +165,30 @@ MyTreeIndex                    = tree.TreeIndex,
             }
         }
 
-
-        
-        // 얕은 복사
         public static unsafe NativeEdge** ReAlloc2D(NativeEdge** src, int srcLen, int targetLen, Allocator srcAllocator, Allocator targetAllocator)
         {
             int ptrSize = sizeof(NativeEdge*);
             int ptrAlign = sizeof(AlignOfHelper) - sizeof(NativeEdge*);
-
             NativeEdge** tempArr = (NativeEdge**)UnsafeUtility.Malloc((long)targetLen * ptrSize, ptrAlign, targetAllocator);
 
             if (srcLen > 0 && src != null)
-            {
                 UnsafeUtility.MemCpy(tempArr, src, srcLen * ptrSize);
-            }
 
             if (src != null)
                 UnsafeUtility.Free(src, srcAllocator);
 
             return tempArr;
         }
+
         private unsafe struct AlignOfHelper
         {
             public byte dummy;
-            public unsafe NativeEdge* data;
+            public NativeEdge* data;
         }
-        
+
         public void Dispose()
         {
-            _edgeLen.Dispose();
-
-            unsafe
-            {
-                if (_edge2Ptr != null)
-                {
-                    for (int i = 0; i < _edge2PtrLength; i++)
-                    {
-                        if (_edge2Ptr[i] != null)
-                        {
-                            UnsafeUtility.Free(_edge2Ptr[i], Allocator.Persistent);
-                        }
-                    }
-
-                    UnsafeUtility.Free(_edge2Ptr, Allocator.Persistent);
-                }
-
-                _edge2Ptr = null;
-            }
+            NativeGraph.Dispose();
         }
     }
 }
