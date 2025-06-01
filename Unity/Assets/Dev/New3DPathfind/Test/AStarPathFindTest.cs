@@ -143,14 +143,19 @@ namespace Candy.Pathfind3D
             if (!_path.IsCreated || _path.Length < 2)
                 return;
 
-            Gizmos.color = Color.green;
 
             for (int i = 0; i < _path.Length - 1; i++)
             {
                 var nodeA = GraphGenerator.NativeOctTree3D.GetTree(_path[i].TreeIndex).GetNode(_path[i].FlattenIndex);
                 var nodeB = GraphGenerator.NativeOctTree3D.GetTree(_path[i + 1].TreeIndex).GetNode(_path[i + 1].FlattenIndex);
+                
 
+                Gizmos.color = Color.green;
                 Gizmos.DrawLine(nodeA.WorldPosition, nodeB.WorldPosition);
+                
+                Gizmos.color = Color.blue;
+                Gizmos.DrawWireCube(nodeA.WorldPosition, nodeA.Scale * Vector3.one);
+                Gizmos.DrawWireCube(nodeB.WorldPosition, nodeB.Scale * Vector3.one);
             }
         }
 

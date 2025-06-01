@@ -122,7 +122,7 @@ namespace Candy.Pathfind3D
                         CameFrom[neighbor] = current;
                         CostFromStart[neighbor] = tentativeG;
                         EstimatedTotalCost[neighbor] = tentativeG + Heuristic(neighbor);
-                        neighbor.Weight = tentativeG;
+                        neighbor.Weight =  tentativeG + Heuristic(neighbor);;
 
                         if (notInOpenSet)
                             OpenSet.Insert(neighbor);

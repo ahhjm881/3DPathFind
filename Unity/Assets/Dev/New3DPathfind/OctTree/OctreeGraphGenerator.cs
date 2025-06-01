@@ -112,7 +112,8 @@ namespace Candy.Pathfind3D
                 {
                     for (int z = 0; z < calculator.SizeZ; z++)
                     {
-                        _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[x, y, z].NativeTree, Size.x * Size.y * Size.z);
+                        int offset = _graph.NativeGraph.Edge2PtrLength;
+                        _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[x, y, z].NativeTree, Size.x * Size.y * Size.z, false, offset);
 
                         int count = calculator.GetNeighbors(x, y, z, neighborCoords);
 
@@ -122,7 +123,7 @@ namespace Candy.Pathfind3D
                             int ny = neighborCoords[i, 1];
                             int nz = neighborCoords[i, 2];
 
-                            _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[nx, ny, nz].NativeTree, Size.x * Size.y * Size.z);
+                            _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[nx, ny, nz].NativeTree, Size.x * Size.y * Size.z, true, offset);
                         }
 
                         _graph.NativeGraph.EdgeTreeOffset[_trees[x, y, z].NativeTree.TreeIndex] = (b += _trees[x, y, z].NativeTree.FlattenArr.Length);

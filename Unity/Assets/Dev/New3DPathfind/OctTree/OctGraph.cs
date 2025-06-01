@@ -101,35 +101,35 @@ namespace Candy.Pathfind3D
             return (6 * faceNodeCount) + (8 * lineNodeCount) + 8;
         }
 
-        public void Tree2Graph(NativeFlattenOctTree tree, NativeFlattenOctTree targetTree, int treeCount)
+        public void Tree2Graph(NativeFlattenOctTree tree, NativeFlattenOctTree targetTree, int treeCount, bool isNeighbor, int offset)
         {
             int cpuCoreCount = 32;
             int maxEdgeArrayLength = IntegerMath.CubeRootOf8(tree.Depth);
 
             unsafe
             {
-                int offset = NativeGraph.Edge2PtrLength;
-
-                if (NativeGraph.Edge2Ptr == null)
+                if (isNeighbor is false)
                 {
-                    Debug.Assert(!NativeGraph.EdgeLen.IsCreated);
-                    NativeGraph.EdgeLen = new NativeList<int>(tree.FlattenArr.Length, Allocator.Persistent);
-                    NativeGraph.EdgeLen.ResizeUninitialized(tree.FlattenArr.Length);
-                    NativeGraph.Edge2PtrLength = tree.FlattenArr.Length;
-                    NativeGraph.EdgeTreeOffset = new NativeArray<int>(treeCount, Allocator.Persistent);
-                    offset = 0;
+                    if (NativeGraph.Edge2Ptr == null)
+                    {
+                        Debug.Assert(!NativeGraph.EdgeLen.IsCreated);
+                        NativeGraph.EdgeLen = new NativeList<int>(tree.FlattenArr.Length, Allocator.Persistent);
+                        NativeGraph.EdgeLen.ResizeUninitialized(tree.FlattenArr.Length);
+                        NativeGraph.Edge2PtrLength = tree.FlattenArr.Length;
+                        NativeGraph.EdgeTreeOffset = new NativeArray<int>(treeCount, Allocator.Persistent);
 
-                    int size = NativeGraph.Edge2PtrLength * sizeof(NativeEdge*);
-                    NativeGraph.Edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(size, sizeof(AlignOfHelper) - sizeof(NativeEdge*), Allocator.Persistent);
-                    UnsafeUtility.MemClear(NativeGraph.Edge2Ptr, size);
-                }
-                else
-                {
-                    NativeGraph.Edge2Ptr = ReAlloc2D(NativeGraph.Edge2Ptr, NativeGraph.Edge2PtrLength, NativeGraph.Edge2PtrLength + tree.FlattenArr.Length, Allocator.Persistent, Allocator.Persistent);
-                    UnsafeUtility.MemClear(NativeGraph.Edge2Ptr + NativeGraph.Edge2PtrLength, sizeof(NativeEdge*) * tree.FlattenArr.Length);
-                    NativeGraph.Edge2PtrLength += tree.FlattenArr.Length;
-                    Debug.Assert(NativeGraph.EdgeLen.IsCreated);
-                    NativeGraph.EdgeLen.ResizeUninitialized(NativeGraph.Edge2PtrLength);
+                        int size = NativeGraph.Edge2PtrLength * sizeof(NativeEdge*);
+                        NativeGraph.Edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(size, sizeof(AlignOfHelper) - sizeof(NativeEdge*), Allocator.Persistent);
+                        UnsafeUtility.MemClear(NativeGraph.Edge2Ptr, size);
+                    }
+                    else
+                    {
+                        NativeGraph.Edge2Ptr = ReAlloc2D(NativeGraph.Edge2Ptr, NativeGraph.Edge2PtrLength, NativeGraph.Edge2PtrLength + tree.FlattenArr.Length, Allocator.Persistent, Allocator.Persistent);
+                        UnsafeUtility.MemClear(NativeGraph.Edge2Ptr + NativeGraph.Edge2PtrLength, sizeof(NativeEdge*) * tree.FlattenArr.Length);
+                        NativeGraph.Edge2PtrLength += tree.FlattenArr.Length;
+                        Debug.Assert(NativeGraph.EdgeLen.IsCreated);
+                        NativeGraph.EdgeLen.ResizeUninitialized(NativeGraph.Edge2PtrLength);
+                    }
                 }
 
                 new Tree2GraphJob
@@ -142,6 +142,7 @@ namespace Candy.Pathfind3D
                     TargetIndexArr = targetTree.IndexArr,
                     TargetTreeIndex = targetTree.TreeIndex,
                     MyTreeIndex = tree.TreeIndex,
+                    IsNeighbor = isNeighbor,
                     EdgeLen = new NativeSlice<int>(NativeGraph.EdgeLen.AsArray(), offset),
                     UnsafeEdge2dArr = NativeGraph.Edge2Ptr + offset,
                     AllocationStep = maxEdgeArrayLength

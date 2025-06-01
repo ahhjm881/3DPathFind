@@ -36,6 +36,8 @@ namespace Candy.Pathfind3D
 
         [WriteOnly]
         public NativeSlice<int> EdgeLen;
+        
+        public bool IsNeighbor;
 
         public int AllocationStep;
         
@@ -53,11 +55,22 @@ namespace Candy.Pathfind3D
             MinMaxAABB myAABB =
                 MinMaxAABB.CreateFromCenterAndExtents(myNode.WorldPosition, myNode.Scale * 1.5f * new float3(1f, 1f, 1f));
 
-            NativeEdge* edgeArr = (NativeEdge*)UnsafeUtility.Malloc(
-                AllocationStep * UnsafeUtility.SizeOf<NativeEdge>(), 
-                UnsafeUtility.AlignOf<NativeEdge>(),
-                Allocator.TempJob);
+            NativeEdge* edgeArr = null;
+
+            if (IsNeighbor is false)
+            {
+                edgeArr = (NativeEdge*)UnsafeUtility.Malloc(
+                    AllocationStep * UnsafeUtility.SizeOf<NativeEdge>(), 
+                    UnsafeUtility.AlignOf<NativeEdge>(),
+                    Allocator.Persistent);
+            }
+            else
+            {
+                edgeArr = UnsafeEdge2dArr[index];
+            }
             
+            int currentEdgeIndex = IsNeighbor is false ? 0 : EdgeLen[index];
+            int edgeArrCapacity = IsNeighbor is false ? AllocationStep : EdgeLen[index];
             
             int* swapSearchArr = swapSearch2Arr;
             int swapSearchCapacity = AllocationStep;
@@ -68,9 +81,6 @@ namespace Candy.Pathfind3D
             swapSearchArr[0] = 0;
             int currentTreeSearchIndex = 1;
             int treeSearchCapacity = AllocationStep;
-            
-            int currentEdgeIndex = 0;
-            int edgeArrCapacity = AllocationStep;
 
 
             int counter = 0;
@@ -126,7 +136,7 @@ namespace Candy.Pathfind3D
                             PrevNodeFlattenIndex = myNode.FlattenIndex,
                             NextNodeFlattenIndex = targetNode.FlattenIndex,
                         };
-                        
+
                         edgeArr = AddList(edgeArr, edge, currentEdgeIndex++, &edgeArrCapacity);
                     }
                 }
@@ -139,10 +149,12 @@ namespace Candy.Pathfind3D
                 treeSearchCapacity = swapSearchCapacity;
                 swapSearchCapacity = tempCapacity;
             }
-            
 
-            UnsafeEdge2dArr[index] = ReAlloc(currentEdgeIndex, currentEdgeIndex, edgeArr, true);
+
+            UnsafeEdge2dArr[index] = ReAlloc(currentEdgeIndex, currentEdgeIndex, edgeArr, Allocator.Persistent,
+                Allocator.Persistent);
             EdgeLen[index] = currentEdgeIndex;
+
             treeSearch2Arr = treeSearchArr;
             swapSearch2Arr = swapSearchArr;
         }
@@ -152,7 +164,7 @@ namespace Candy.Pathfind3D
         {
             if (curIndex >= (*capacity))
             {
-                arr = ReAlloc<T>(curIndex + 1, *capacity * 2, arr, false);
+                arr = ReAlloc<T>(curIndex + 1, *capacity * 2, arr, Allocator.Persistent, Allocator.Persistent);
                 (*capacity) *= 2;
             }
 
@@ -160,18 +172,17 @@ namespace Candy.Pathfind3D
             return arr;
         }
 
-        private T* ReAlloc<T>(int currentLen, int newLen, T* arr, bool isOutputBufferPersistent)
+        private T* ReAlloc<T>(int currentLen, int newLen, T* arr, Allocator currentAllocator, Allocator newAllocator)
             where T : unmanaged
         {
             int edgeSize = UnsafeUtility.SizeOf<T>();
             int alignment = UnsafeUtility.AlignOf<T>();
-            T* tempArr = (T*)UnsafeUtility.Malloc((long)newLen * edgeSize, alignment,
-                isOutputBufferPersistent ? Allocator.Persistent : Allocator.TempJob);
+            T* tempArr = (T*)UnsafeUtility.Malloc((long)newLen * edgeSize, alignment, newAllocator);
             
             if(currentLen > 0)
                 UnsafeUtility.MemCpy(tempArr, arr, currentLen * edgeSize);
             
-            UnsafeUtility.Free(arr, Allocator.TempJob);
+            UnsafeUtility.Free(arr, currentAllocator);
             
             return tempArr;
         }
