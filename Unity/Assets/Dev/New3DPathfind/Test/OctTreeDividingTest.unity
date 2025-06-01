@@ -418919,7 +418919,7 @@ Transform:
   m_GameObject: {fileID: 1528708534}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -75.92, y: 0, z: -391.7}
+  m_LocalPosition: {x: -83.6, y: 0, z: -470}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -418937,13 +418937,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 180e11c8bdae4d69be2c3206f92e127c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Size: {x: 2, y: 2, z: 2}
-  IsDrawNode: 1
+  Size: {x: 4, y: 4, z: 4}
+  IsDrawNode: 0
   IsDrawEdge: 0
   _param:
     MinDepth: 0
-    MaxDepth: 5
-    Scale: 30
+    MaxDepth: 7
+    Scale: 150
 --- !u!1 &1529553725
 GameObject:
   m_ObjectHideFlags: 0

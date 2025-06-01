@@ -66,7 +66,7 @@ namespace Candy.Pathfind3D
         [NativeDisableContainerSafetyRestriction]
         public MinHeap<AStarNodeKey> OpenSet;
         [NativeDisableContainerSafetyRestriction]
-        public NativeList<AStarNodeKey> ClosedSet;
+        public NativeHashSet<AStarNodeKey> ClosedSet;
         [NativeDisableContainerSafetyRestriction]
         public NativeHashMap<AStarNodeKey, float> CostFromStart;
         [NativeDisableContainerSafetyRestriction]

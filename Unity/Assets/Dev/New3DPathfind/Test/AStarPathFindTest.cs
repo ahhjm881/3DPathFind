@@ -64,7 +64,7 @@ namespace Candy.Pathfind3D
 
             // 컨테이너 초기화
             var openSet = new MinHeap<AStarNodeKey>(256, Allocator.TempJob);
-            var closedSet = new NativeList<AStarNodeKey>(256, Allocator.TempJob);
+            var closedSet = new NativeHashSet<AStarNodeKey>(256, Allocator.TempJob);
             var costFromStart = new NativeHashMap<AStarNodeKey, float>(512, Allocator.TempJob);
             var estimatedTotalCost = new NativeHashMap<AStarNodeKey, float>(512, Allocator.TempJob);
             var cameFrom = new NativeHashMap<AStarNodeKey, AStarNodeKey>(512, Allocator.TempJob);
