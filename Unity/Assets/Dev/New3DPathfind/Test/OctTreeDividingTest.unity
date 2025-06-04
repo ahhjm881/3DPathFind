@@ -448972,8 +448972,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Size: {x: 1, y: 1, z: 1}
-  AwakeGenerateSpace: 1
-  AwakeGenerateGraph: 1
+  AwakeGenerateSpace: 0
+  AwakeGenerateGraph: 0
   IsDrawCollisionNode: 0
   IsDrawEmptyNode: 0
   IsDrawEdge: 0
@@ -584192,9 +584192,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _saveTree: 0
-  _loadTree: 1
+  _loadTree: 0
   _saveGraph: 0
-  _loadGraph: 1
+  _loadGraph: 0
   _generator: {fileID: 368737879}
 --- !u!1 &2039960905
 GameObject:

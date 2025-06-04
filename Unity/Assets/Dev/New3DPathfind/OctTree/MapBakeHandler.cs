@@ -6,18 +6,25 @@ using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
 using UnityEngine;
 
-namespace Candy.Pathfind3D
+namespace Candy.Pathfind3D.Editor
 {
+    #if UNITY_EDITOR
+    using UnityEditor;
     public class MapBakeHandler
     {
         public static readonly bool IsLittleEndian = BitConverter.IsLittleEndian;
 
-        public void BakeTree(NativeOctTree3D tree3d)
+        public void BakeTree(NativeOctTree3D tree3d, bool displayProgress)
         {
             string path = "Assets/BakedTree.bytes";
             
             using FileStream stream = new(path, FileMode.Create, FileAccess.Write);
             using BinaryWriter writer = new(stream);
+
+            if (displayProgress)
+            {
+                EditorUtility.DisplayProgressBar("Baking...", "Start", 0f);
+            }
             
             WriteBinary(tree3d.TreeCount, writer);
             WriteBinary(tree3d.Size3D, writer);
@@ -28,6 +35,10 @@ namespace Candy.Pathfind3D
             {
                 for (int i = 0; i < tree3d.TreeCount; i++)
                 {
+                    if (displayProgress)
+                    {
+                        EditorUtility.DisplayProgressBar("Baking...", $"Progress: {i}%", i / (float)tree3d.TreeCount);
+                    }
                     NativeFlattenOctTree tree = tree3d.Trees[i];
                     NativeArray<NativeOctNode> flattenTree = tree.FlattenArr;
                     NativeArray<int> indexArr = tree.IndexArr;
@@ -53,8 +64,14 @@ namespace Candy.Pathfind3D
                     }
                 }
             }
+            
+            if (displayProgress)
+            {
+                EditorUtility.ClearProgressBar();
+                EditorUtility.DisplayDialog("Baking Done", "Baking Complete", "OK");
+            }
         }
-        public void LoadTree(out NativeOctTree3D tree3d)
+        public void LoadTree(out NativeOctTree3D tree3d, int? id)
         {
             string path = "Assets/BakedTree.bytes";
 
@@ -77,6 +94,11 @@ namespace Candy.Pathfind3D
 
                 for (int i = 0; i < treeCount; i++)
                 {
+                    if (id.HasValue)
+                    {
+                        Progress.Report(id.Value, i / (float)treeCount, $"Processing Tree {i}");
+                    }
+                    
                     NativeFlattenOctTree tree = new NativeFlattenOctTree();
 
                     tree.Depth = ReadBinary<int>(reader);
@@ -113,12 +135,22 @@ namespace Candy.Pathfind3D
                 }
 
                 tree3d = new NativeOctTree3D(rootPosition, treeScale, trees, treeSize, treeCount);
+                
+                if (id.HasValue)
+                {
+                    Progress.Finish(id.Value, Progress.Status.Succeeded);
+                }
             }
         }
-        public void BakeGraph(NativeOctGraph graph)
+        public void BakeGraph(NativeOctGraph graph, bool displayProgress)
         {
             string path = "Assets/BakedGraph.bytes";
 
+            if (displayProgress)
+            {
+                EditorUtility.DisplayProgressBar("Baking Graph...", "Start", 0f);
+            }
+            
             // 파일 스트림 생성
             using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write))
             using (BinaryWriter writer = new BinaryWriter(stream))
@@ -129,6 +161,10 @@ namespace Candy.Pathfind3D
                     
                     WriteBinary(graph.Edge2PtrLength, writer);
 
+                    if (displayProgress)
+                    {
+                        EditorUtility.DisplayProgressBar("Baking Graph...", "Edge Length", 0f);
+                    }
                     for (int i = 0; i < graph.Edge2PtrLength; i++)
                     {
                         WriteBinary(graph.EdgeLen[i], writer);
@@ -136,12 +172,20 @@ namespace Candy.Pathfind3D
                     
                     for (int i = 0; i < graph.Edge2PtrLength; i++)
                     {
+                        if (displayProgress)
+                        {
+                            EditorUtility.DisplayProgressBar("Baking Graph...", "Edges", i / (float)graph.Edge2PtrLength);
+                        }
                         for (int j = 0; j < graph.EdgeLen[i]; j++)
                         {
                             WriteBinary(graph.Edge2Ptr[i][j], writer);
                         }
                     }
                     
+                    if (displayProgress)
+                    {
+                        EditorUtility.DisplayProgressBar("Baking Graph...", "Offsets", 0f);
+                    }
                     WriteBinary(graph.EdgeTreeOffset.Length, writer);
                     for (int i = 0; i < graph.EdgeTreeOffset.Length; i++)
                     {
@@ -149,9 +193,15 @@ namespace Candy.Pathfind3D
                     }
                 }
             }
+            
+            if (displayProgress)
+            {
+                EditorUtility.ClearProgressBar();
+                EditorUtility.DisplayDialog("Baking Done", "Baking Complete", "OK");
+            }
         }
         
-        public void LoadGraph(out NativeOctGraph graph)
+        public void LoadGraph(out NativeOctGraph graph, int? id)
         {
             string path = "Assets/BakedGraph.bytes";
 
@@ -181,6 +231,11 @@ namespace Candy.Pathfind3D
 
                     for (int j = 0; j < len; j++)
                     {
+                        if (id.HasValue)
+                        {
+                            Progress.Report(id.Value, j / (float)len, $"Processing Edge {i}");
+                        }
+                        
                         edgeArray[j] = ReadBinary<NativeEdge>(reader);
                     }
 
@@ -192,8 +247,17 @@ namespace Candy.Pathfind3D
                 graph.EdgeTreeOffset = new NativeArray<int>(offsetLength, Allocator.Persistent);
                 for (int i = 0; i < offsetLength; i++)
                 {
+                    if (id.HasValue)
+                    {
+                        Progress.Report(id.Value, i / (float)offsetLength, $"Processing offset length");
+                    }
                     graph.EdgeTreeOffset[i] = ReadBinary<int>(reader);
                 }
+            }
+            
+            if (id.HasValue)
+            {
+                Progress.Finish(id.Value, Progress.Status.Succeeded);
             }
         }
         
@@ -245,4 +309,5 @@ namespace Candy.Pathfind3D
             }
         }
     }
+    #endif
 }
