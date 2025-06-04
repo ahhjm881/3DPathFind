@@ -18,7 +18,9 @@ namespace Candy.Pathfind3D
     public class OctreeGraphGenerator : MonoBehaviour
     {
         public Vector3Int Size;
-        public bool IsDrawNode;
+        public bool IsDrawCollisionNode;
+        public bool IsDrawEmptyNode;
+        
         public bool IsDrawEdge;
  
         
@@ -154,7 +156,7 @@ namespace Candy.Pathfind3D
         {
             Gizmos.DrawWireCube(transform.position + _param.Scale * (Vector3)Size * 0.5f, _param.Scale * (Vector3)Size);
 
-            if (IsDrawNode is false) return;
+            if (IsDrawCollisionNode is false && IsDrawEmptyNode is false) return;
             if (_trees is null) return;
 
 
@@ -203,8 +205,12 @@ namespace Candy.Pathfind3D
 
                                 if (nativeTree.HasChild(range) is false)
                                 {
-                                    Gizmos.color = nodeColor;
-                                    Gizmos.DrawWireCube(node.WorldPosition, Vector3.one * node.Scale);
+                                    if ((IsDrawCollisionNode && node.IsObstacle) ||
+                                        (IsDrawEmptyNode && node.IsObstacle is false))
+                                    {
+                                        Gizmos.color = nodeColor;
+                                        Gizmos.DrawWireCube(node.WorldPosition, Vector3.one * node.Scale);
+                                    }
                                 }
                             }
                         }
