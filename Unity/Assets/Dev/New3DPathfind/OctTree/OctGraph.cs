@@ -17,6 +17,17 @@ namespace Candy.Pathfind3D
         public int Edge2PtrLength;
 
         public NativeArray<int> EdgeTreeOffset;
+
+        public bool IsCreated
+        {
+            get
+            {
+                unsafe
+                {
+                    return Edge2Ptr != null;
+                }
+            }
+        }
         
         public NativeEdge GetEdge(int nodeIndex, int edgeIndex)
         {
@@ -60,7 +71,7 @@ namespace Candy.Pathfind3D
         }
     }
 
-    public class OctGraph : IDisposable
+    public class OctGraph
     {
         public NativeOctGraph NativeGraph;
 
@@ -200,11 +211,6 @@ namespace Candy.Pathfind3D
         {
             public byte dummy;
             public NativeEdge* data;
-        }
-
-        public void Dispose()
-        {
-            NativeGraph.Dispose();
         }
     }
 }

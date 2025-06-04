@@ -99,9 +99,9 @@ namespace Candy.Pathfind3D
                     IndexArr = indexArr,
                     TreeArr = treeArr,
 
-                    FlattenPtr = (NativeOctNode*)flattenArr.GetUnsafeReadOnlyPtr(),
-                    IndexPtr = (int*)indexArr.GetUnsafeReadOnlyPtr(),
-                    TreePtr = (int*)treeArr.GetUnsafeReadOnlyPtr(),
+                    FlattenPtr = (NativeOctNode*)flattenArr.GetUnsafePtr(),
+                    IndexPtr = (int*)indexArr.GetUnsafePtr(),
+                    TreePtr = (int*)treeArr.GetUnsafePtr(),
 
                     Depth = Parameter.MaxDepth,
                     TreeIndex = TreeIndex

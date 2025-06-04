@@ -24,14 +24,9 @@ namespace Candy.Pathfind3D
         public bool IsDrawEmptyNode;
         public bool IsDrawEdge;
  
-        
         [SerializeField] private OctTree.InitParameter _param;
 
-        private OctTree[,,] _trees;
-        private (int x, int y, int z)[] _treeIndices;
-        private OctGraph _graph;
-
-        public NativeOctGraph NativeOctGraph => _graph.NativeGraph;
+        public NativeOctGraph NativeOctGraph { get; private set; }
         public NativeOctTree3D NativeOctTree3D { get; private set; }
 
         private void Start()
@@ -48,19 +43,24 @@ namespace Candy.Pathfind3D
 
         public void SetGraph(NativeOctGraph graph)
         {
-            if (_graph == null)
+            if (NativeOctGraph.IsCreated)
             {
-                _graph = new OctGraph(graph);
-                return;
+                NativeOctGraph.Dispose();
             }
-            NativeOctGraph.Dispose();
-            _graph.NativeGraph = graph;
+            NativeOctGraph = graph;
+        }
+
+        public void SetTree(NativeOctTree3D tree3d)
+        {
+            if (NativeOctTree3D.IsCreated)
+            {
+                NativeOctTree3D.Dispose();
+            }
+            NativeOctTree3D = tree3d;
         }
 
         private void CreateSpace()
         {
-            _trees = new OctTree[Size.x, Size.y, Size.z];
-            _treeIndices = new (int, int, int)[Size.x * Size.y * Size.z];
             Stopwatch w = new Stopwatch();
 
             Profiler.BeginSample("Init Common Buffer");
@@ -74,6 +74,7 @@ namespace Candy.Pathfind3D
             w.Start();
             Profiler.BeginSample("Create");
             int treeIndex = 0;
+            List<NativeFlattenOctTree> nativeTreeList = new List<NativeFlattenOctTree>();
             for (int i = 0; i < Size.x; i++)
             {
                 for (int j = 0; j < Size.y; j++)
@@ -85,8 +86,7 @@ namespace Candy.Pathfind3D
                         var tree = new OctTree(_param, treeIndex++);
                         tree.CreateSpace(overlapBoxCommands, results, treeBuffer);
                         totalFlattenTreeSize += tree.NativeTree.Size;
-                        _trees[i, j, k] = tree;
-                        _treeIndices[treeIndex - 1] = (i, j, k);
+                        nativeTreeList.Add(tree.NativeTree);
                     }
                 }
             }
@@ -98,7 +98,7 @@ namespace Candy.Pathfind3D
             str.AppendLine(NativeUtility.GetMemoryUsageMessage(overlapBoxCommands, out sizes[0], "OverlapBoxCommand"));
             str.AppendLine(NativeUtility.GetMemoryUsageMessage(results, out sizes[1], "ColliderHit"));
             str.AppendLine(NativeUtility.GetMemoryUsageMessage(treeBuffer, out sizes[2], "Buffer"));
-            str.AppendLine($"Flatten Tree Avg size: {NativeUtility.FormatBytes(totalFlattenTreeSize / _trees.Length)}");
+            str.AppendLine($"Flatten Tree Avg size: {NativeUtility.FormatBytes(totalFlattenTreeSize / (Size.x * Size.y * Size.z))}");
             str.AppendLine($"총 피크 메모리: {NativeUtility.FormatBytes(sizes.Sum() + totalFlattenTreeSize)}");
             str.AppendLine($"최종 메모리: {NativeUtility.FormatBytes(totalFlattenTreeSize)}");
             str.AppendLine($"걸린 시간: {w.ElapsedMilliseconds}ms");
@@ -110,16 +110,22 @@ namespace Candy.Pathfind3D
             treeBuffer.Dispose();
             Profiler.EndSample();
 
-            NativeOctTree3D = new NativeOctTree3D(transform.position + Vector3.one * _param.Scale * 0.5f, _param.Scale, _trees, Size);
+            if (NativeOctTree3D.IsCreated)
+            {
+                NativeOctTree3D.Dispose();
+            }
+            NativeOctTree3D = new NativeOctTree3D(transform.position + Vector3.one * _param.Scale * 0.5f, _param.Scale, nativeTreeList, Size);
         }
 
         private void CreateGraph()
         {
+            if (NativeOctTree3D.IsCreated is false) return;
+            
             Stopwatch w = new Stopwatch();
             w.Start();
             
             Profiler.BeginSample("Create Graph");
-            _graph = new OctGraph();
+            var graph = new OctGraph();
 
             OctTreeNeighborIndexCalculator calculator = new(Size.x, Size.y, Size.z);
             int[,] neighborCoords = new int[26, 3]; // [i, 0]=x, [i,1]=y, [i,2]=z
@@ -132,8 +138,12 @@ namespace Candy.Pathfind3D
                 {
                     for (int z = 0; z < calculator.SizeZ; z++)
                     {
-                        int offset = _graph.NativeGraph.Edge2PtrLength;
-                        _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[x, y, z].NativeTree, Size.x * Size.y * Size.z, false, offset);
+                        int offset = graph.NativeGraph.Edge2PtrLength;
+                        int treeIndex = NativeOctTree3D.GetFlatIndex(x, y, z);
+                        int treeCount = Size.x * Size.y * Size.z;
+                        
+                        NativeFlattenOctTree tree = NativeOctTree3D.GetTree(treeIndex);
+                        graph.Tree2Graph(tree, tree, treeCount, false, offset);
 
                         int count = calculator.GetNeighbors(x, y, z, neighborCoords);
 
@@ -143,15 +153,24 @@ namespace Candy.Pathfind3D
                             int ny = neighborCoords[i, 1];
                             int nz = neighborCoords[i, 2];
 
-                            _graph.Tree2Graph(_trees[x, y, z].NativeTree, _trees[nx, ny, nz].NativeTree, Size.x * Size.y * Size.z, true, offset);
+                            int neighborTreeIndex = NativeOctTree3D.GetFlatIndex(nx, ny, nz);
+                            NativeFlattenOctTree neighborTree = NativeOctTree3D.GetTree(neighborTreeIndex);
+
+                            graph.Tree2Graph(tree, neighborTree, treeCount, true, offset);
                         }
 
-                        _graph.NativeGraph.EdgeTreeOffset[_trees[x, y, z].NativeTree.TreeIndex] = (b += _trees[x, y, z].NativeTree.FlattenArr.Length);
+                        graph.NativeGraph.EdgeTreeOffset[tree.TreeIndex] = (b += tree.FlattenArr.Length);
 
-                        size += _graph.TotalSize;
+                        size += graph.TotalSize;
                     }
                 }
             }
+
+            if (NativeOctGraph.IsCreated)
+            {
+                NativeOctGraph.Dispose();
+            }
+            NativeOctGraph = graph.NativeGraph;
             w.Stop();
             Profiler.EndSample();
             
@@ -162,30 +181,32 @@ namespace Candy.Pathfind3D
 
         private void OnDestroy()
         {
-            NativeOctTree3D.Dispose();
-            _trees = null;
-            
-            NativeOctGraph.Dispose();
-            _graph.Dispose();
-            _graph = null;
+            if (NativeOctTree3D.IsCreated)
+            {
+                NativeOctTree3D.Dispose();
+            }
+            if (NativeOctGraph.IsCreated)
+            {
+                NativeOctGraph.Dispose();
+            }
         }
 
         private void DrawNode()
         {
-            Gizmos.DrawWireCube(transform.position + _param.Scale * (Vector3)Size * 0.5f, _param.Scale * (Vector3)Size);
+            Gizmos.DrawWireCube(transform.position + NativeOctTree3D.TreeScale * (Vector3)Size * 0.5f, NativeOctTree3D.TreeScale * (Vector3)Size);
 
             if (IsDrawCollisionNode is false && IsDrawEmptyNode is false) return;
-            if (_trees is null) return;
+            if (NativeOctTree3D.IsCreated is false) return;
 
 
-            for (int x = 0; x < Size.x; x++)
+            for (int x = 0; x < NativeOctTree3D.Size3D.x; x++)
             {
-                for (int y = 0; y < Size.y; y++)
+                for (int y = 0; y < NativeOctTree3D.Size3D.y; y++)
                 {
-                    for (int z = 0; z < Size.z; z++)
+                    for (int z = 0; z < NativeOctTree3D.Size3D.z; z++)
                     {
-                        OctTree tree = _trees[x, y, z];
-                        NativeFlattenOctTree nativeTree = tree.NativeTree;
+                        int treeIndex = NativeOctTree3D.GetFlatIndex(x, y, z);
+                        NativeFlattenOctTree nativeTree = NativeOctTree3D.GetTree(treeIndex);
                         Queue<int> queue = new Queue<int>(100);
                         queue.Enqueue(nativeTree.RootIndex);
 
@@ -239,23 +260,33 @@ namespace Candy.Pathfind3D
 
         private void DrawEdge()
         {
-            if (_graph is null) return;
             if (IsDrawEdge is false) return;
-            
-            if (_graph.IsCreated is false) return;
+            if (NativeOctGraph.IsCreated is false) return;
+            if (NativeOctTree3D.IsCreated is false) return;
 
-            for (int i = 0; i < _graph.EdgeArrLength; i++)
+            for (int i = 0; i < NativeOctGraph.Edge2PtrLength; i++)
             {
-                for (int j = 0; j < _graph.EdgeLen[i]; j++)
+                for (int j = 0; j < NativeOctGraph.EdgeLen[i]; j++)
                 {
-                    NativeEdge edge = _graph.GetEdge(i, j);
+                    NativeEdge edge = NativeOctGraph.GetEdge(i, j);
                     
                     Gizmos.color = Color.yellow;
 
-                    var fromTreeXYZ = _treeIndices[edge.PrevTreeIndex];
-                    var toTreeXYZ = _treeIndices[edge.NextTreeIndex];
-                    NativeOctNode fromNode = _trees[fromTreeXYZ.x, fromTreeXYZ.y, fromTreeXYZ.z].NativeTree.GetNode(edge.PrevNodeFlattenIndex);
-                    NativeOctNode toNode = _trees[toTreeXYZ.x, toTreeXYZ.y, toTreeXYZ.z].NativeTree.GetNode(edge.NextNodeFlattenIndex);
+                    NativeOctNode fromNode = default;
+                    NativeOctNode toNode = default;
+
+                    unsafe
+                    {
+                        if (!(edge.PrevTreeIndex >= NativeOctTree3D.TreeCount || edge.PrevTreeIndex < 0))
+                        {
+                            fromNode = NativeOctTree3D.Trees[edge.PrevTreeIndex].GetNode(edge.PrevNodeFlattenIndex);
+                        }
+                        if (!(edge.NextTreeIndex >= NativeOctTree3D.TreeCount || edge.NextTreeIndex < 0))
+                        {
+                            toNode = NativeOctTree3D.Trees[edge.NextTreeIndex].GetNode(edge.NextNodeFlattenIndex);
+                        }
+                    }
+                    
                     Gizmos.DrawLine(fromNode.WorldPosition,toNode.WorldPosition);
                 }
             }

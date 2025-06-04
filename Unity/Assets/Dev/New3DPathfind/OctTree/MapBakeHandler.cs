@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace Candy.Pathfind3D
@@ -13,9 +14,107 @@ namespace Candy.Pathfind3D
 
         public void BakeTree(NativeOctTree3D tree3d)
         {
+            string path = "Assets/BakedTree.bytes";
             
+            using FileStream stream = new(path, FileMode.Create, FileAccess.Write);
+            using BinaryWriter writer = new(stream);
+            
+            WriteBinary(tree3d.TreeCount, writer);
+            WriteBinary(tree3d.Size3D, writer);
+            WriteBinary(tree3d.RootPosition, writer);
+            WriteBinary(tree3d.TreeScale, writer);
+
+            unsafe
+            {
+                for (int i = 0; i < tree3d.TreeCount; i++)
+                {
+                    NativeFlattenOctTree tree = tree3d.Trees[i];
+                    NativeArray<NativeOctNode> flattenTree = tree.FlattenArr;
+                    NativeArray<int> indexArr = tree.IndexArr;
+                    NativeArray<int> treeArr = tree.TreeArr;
+
+                    WriteBinary(tree.Depth, writer);
+                    WriteBinary(tree.TreeIndex, writer);
+                    
+                    WriteBinary(flattenTree.Length, writer);
+                    for (int j = 0; j < flattenTree.Length; j++)
+                    {
+                        WriteBinary(flattenTree[j], writer);
+                    }
+                    WriteBinary(indexArr.Length, writer);
+                    for (int j = 0; j < indexArr.Length; j++)
+                    {
+                        WriteBinary(indexArr[j], writer);
+                    }
+                    WriteBinary(treeArr.Length, writer);
+                    for (int j = 0; j < treeArr.Length; j++)
+                    {
+                        WriteBinary(treeArr[j], writer);
+                    }
+                }
+            }
         }
-        
+        public void LoadTree(out NativeOctTree3D tree3d)
+        {
+            string path = "Assets/BakedTree.bytes";
+
+            using FileStream stream = new(path, FileMode.Open, FileAccess.Read);
+            using BinaryReader reader = new(stream);
+
+            unsafe
+            {
+
+                // 기본 정보 복원
+                int treeCount = ReadBinary<int>(reader);
+                int3 treeSize = ReadBinary<int3>(reader);
+                Vector3 rootPosition = ReadBinary<float3>(reader);
+                float treeScale = ReadBinary<float>(reader);
+                
+                NativeFlattenOctTree* trees = (NativeFlattenOctTree*)UnsafeUtility.Malloc(
+                    sizeof(NativeFlattenOctTree) * treeCount, UnsafeUtility.AlignOf<NativeFlattenOctTree>(),
+                    Allocator.Persistent
+                );
+
+                for (int i = 0; i < treeCount; i++)
+                {
+                    NativeFlattenOctTree tree = new NativeFlattenOctTree();
+
+                    tree.Depth = ReadBinary<int>(reader);
+                    tree.TreeIndex = ReadBinary<int>(reader);
+
+                    // FlattenArr
+                    int flattenLen = ReadBinary<int>(reader);
+                    tree.FlattenArr = new NativeArray<NativeOctNode>(flattenLen, Allocator.Persistent);
+                    for (int j = 0; j < flattenLen; j++)
+                    {
+                        tree.FlattenArr[j] = ReadBinary<NativeOctNode>(reader);
+                    }
+
+                    // IndexArr
+                    int indexLen = ReadBinary<int>(reader);
+                    tree.IndexArr = new NativeArray<int>(indexLen, Allocator.Persistent);
+                    for (int j = 0; j < indexLen; j++)
+                    {
+                        tree.IndexArr[j] = ReadBinary<int>(reader);
+                    }
+
+                    // TreeArr
+                    int treeLen = ReadBinary<int>(reader);
+                    tree.TreeArr = new NativeArray<int>(treeLen, Allocator.Persistent);
+                    for (int j = 0; j < treeLen; j++)
+                    {
+                        tree.TreeArr[j] = ReadBinary<int>(reader);
+                    }
+
+                    tree.FlattenPtr = (NativeOctNode*)tree.FlattenArr.GetUnsafePtr();
+                    tree.IndexPtr = (int*)tree.IndexArr.GetUnsafePtr();
+                    tree.TreePtr = (int*)tree.FlattenArr.GetUnsafePtr();
+                    trees[i] = tree;
+                }
+
+                tree3d = new NativeOctTree3D(rootPosition, treeScale, trees, treeSize, treeCount);
+            }
+        }
         public void BakeGraph(NativeOctGraph graph)
         {
             string path = "Assets/BakedGraph.bytes";
@@ -24,10 +123,6 @@ namespace Candy.Pathfind3D
             using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write))
             using (BinaryWriter writer = new BinaryWriter(stream))
             {
-                // ↓ 여기에 graph 데이터를 writer로 write하는 코드 작성할 것
-                // 예: writer.Write(graph.NodeCount);
-                // 예: for (...) writer.Write(graph.Nodes[i].Position.x);
-
                 unsafe
                 {
                     Debug.Assert(graph.Edge2PtrLength == graph.EdgeLen.Length);
@@ -56,7 +151,7 @@ namespace Candy.Pathfind3D
             }
         }
         
-        public void LoadGraph(out NativeOctGraph graph, Allocator allocator)
+        public void LoadGraph(out NativeOctGraph graph)
         {
             string path = "Assets/BakedGraph.bytes";
 
@@ -69,20 +164,20 @@ namespace Candy.Pathfind3D
                 graph.Edge2PtrLength = ReadBinary<int>(reader);
 
                 // 2. EdgeLen
-                graph.EdgeLen = new NativeList<int>(graph.Edge2PtrLength, allocator);
+                graph.EdgeLen = new NativeList<int>(graph.Edge2PtrLength, Allocator.Persistent);
                 for (int i = 0; i < graph.Edge2PtrLength; i++)
                 {
                     graph.EdgeLen.Add(ReadBinary<int>(reader));
                 }
 
                 // 3. Edge2Ptr
-                graph.Edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(sizeof(NativeEdge*) * graph.Edge2PtrLength, OctGraph.GetNativeEdgeAlign(), allocator);
+                graph.Edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(sizeof(NativeEdge*) * graph.Edge2PtrLength, OctGraph.GetNativeEdgeAlign(), Allocator.Persistent);
 
                 for (int i = 0; i < graph.Edge2PtrLength; i++)
                 {
                     int len = graph.EdgeLen[i];
                     if (len < 0) len = 0;
-                    NativeEdge* edgeArray = (NativeEdge*)UnsafeUtility.Malloc(sizeof(NativeEdge) * len, UnsafeUtility.AlignOf<NativeEdge>(), allocator);
+                    NativeEdge* edgeArray = (NativeEdge*)UnsafeUtility.Malloc(sizeof(NativeEdge) * len, UnsafeUtility.AlignOf<NativeEdge>(), Allocator.Persistent);
 
                     for (int j = 0; j < len; j++)
                     {
@@ -94,7 +189,7 @@ namespace Candy.Pathfind3D
 
                 // 4. EdgeTreeOffset
                 int offsetLength = ReadBinary<int>(reader);
-                graph.EdgeTreeOffset = new NativeArray<int>(offsetLength, allocator);
+                graph.EdgeTreeOffset = new NativeArray<int>(offsetLength, Allocator.Persistent);
                 for (int i = 0; i < offsetLength; i++)
                 {
                     graph.EdgeTreeOffset[i] = ReadBinary<int>(reader);

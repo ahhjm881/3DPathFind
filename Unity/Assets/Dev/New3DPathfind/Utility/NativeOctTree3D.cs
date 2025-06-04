@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Mathematics;
@@ -22,7 +23,16 @@ namespace Candy.Pathfind3D
         public Vector3 RootPosition { get; private set; }
         public float TreeScale { get; private set; }
 
-        public NativeOctTree3D(Vector3 rootPosition, float treeScale, OctTree[,,] trees, Vector3Int size)
+        public unsafe NativeOctTree3D(Vector3 rootPosition, float treeScale, NativeFlattenOctTree* trees, int3 size, int length)
+        {
+            RootPosition = rootPosition;
+            TreeScale = treeScale;
+            _trees = trees;
+            _size = size;
+            _length = length;
+        }
+        
+        public NativeOctTree3D(Vector3 rootPosition, float treeScale, List<NativeFlattenOctTree> trees, Vector3Int size)
         {
             RootPosition = rootPosition;
             TreeScale = treeScale;
@@ -38,8 +48,8 @@ namespace Candy.Pathfind3D
                 {
                     for (int z = 0; z < size.z; z++)
                     {
-                        OctTree tree = trees[x, y, z];
-                        _trees[idx++] = tree.NativeTree;
+                        _trees[idx] = trees[idx];
+                        idx++;
                     }
                 }
             }
