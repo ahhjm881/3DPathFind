@@ -18,9 +18,10 @@ namespace Candy.Pathfind3D
     public class OctreeGraphGenerator : MonoBehaviour
     {
         public Vector3Int Size;
+        public bool AwakeGenerateSpace;
+        public bool AwakeGenerateGraph;
         public bool IsDrawCollisionNode;
         public bool IsDrawEmptyNode;
-        
         public bool IsDrawEdge;
  
         
@@ -35,8 +36,25 @@ namespace Candy.Pathfind3D
 
         private void Start()
         {
-            CreateSpace();
-            CreateGraph(); 
+            if (AwakeGenerateSpace)
+            {
+                CreateSpace();
+            }
+            if (AwakeGenerateGraph)
+            {
+                CreateGraph(); 
+            }
+        }
+
+        public void SetGraph(NativeOctGraph graph)
+        {
+            if (_graph == null)
+            {
+                _graph = new OctGraph(graph);
+                return;
+            }
+            NativeOctGraph.Dispose();
+            _graph.NativeGraph = graph;
         }
 
         private void CreateSpace()
@@ -92,7 +110,7 @@ namespace Candy.Pathfind3D
             treeBuffer.Dispose();
             Profiler.EndSample();
 
-            NativeOctTree3D = new NativeOctTree3D(transform.position + Vector3.one * _param.Scale * 0.5f, _param.Scale, _trees, Size, Allocator.Persistent);
+            NativeOctTree3D = new NativeOctTree3D(transform.position + Vector3.one * _param.Scale * 0.5f, _param.Scale, _trees, Size);
         }
 
         private void CreateGraph()

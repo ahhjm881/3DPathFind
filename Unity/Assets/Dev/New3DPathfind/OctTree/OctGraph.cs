@@ -35,7 +35,10 @@ namespace Candy.Pathfind3D
 
         public void Dispose()
         {
-            EdgeLen.Dispose();
+            if (EdgeLen.IsCreated)
+            {
+                EdgeLen.Dispose();
+            }
 
             unsafe
             {
@@ -92,6 +95,10 @@ namespace Candy.Pathfind3D
         {
             NativeGraph.Edge2PtrLength = 0;
             unsafe { NativeGraph.Edge2Ptr = null; }
+        }
+        public OctGraph(NativeOctGraph graph)
+        {
+            NativeGraph = graph;
         }
 
         public static int CalculateMaxEdgeArrayLength(int depth)
@@ -181,6 +188,14 @@ namespace Candy.Pathfind3D
             return tempArr;
         }
 
+        public static int GetNativeEdgeAlign()
+        {
+            unsafe
+            {
+                return sizeof(AlignOfHelper) - sizeof(NativeEdge*);
+            }
+        }
+        
         private unsafe struct AlignOfHelper
         {
             public byte dummy;

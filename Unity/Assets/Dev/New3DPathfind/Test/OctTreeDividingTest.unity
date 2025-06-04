@@ -102902,6 +102902,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Size: {x: 4, y: 4, z: 4}
+  AwakeGenerateSpace: 1
+  AwakeGenerateGraph: 0
   IsDrawCollisionNode: 0
   IsDrawEmptyNode: 0
   IsDrawEdge: 0
@@ -174826,6 +174828,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 643191820}
+  - component: {fileID: 643191821}
   m_Layer: 0
   m_Name: Test_1
   m_TagString: Untagged
@@ -174851,6 +174854,21 @@ Transform:
   - {fileID: 1200666409}
   m_Father: {fileID: 291970246}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &643191821
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 643191819}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b5a88adb1f6b4bc7be5b4357f2daad61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _save: 0
+  _load: 0
+  _generator: {fileID: 1583001414}
 --- !u!1 &643390540
 GameObject:
   m_ObjectHideFlags: 0
@@ -406596,13 +406614,14 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1444824904}
+  - component: {fileID: 1444824905}
   m_Layer: 0
   m_Name: Test_2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1444824904
 Transform:
   m_ObjectHideFlags: 0
@@ -406621,6 +406640,21 @@ Transform:
   - {fileID: 1065584258}
   m_Father: {fileID: 291970246}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1444824905
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1444824903}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b5a88adb1f6b4bc7be5b4357f2daad61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _save: 0
+  _load: 0
+  _generator: {fileID: 1820482383}
 --- !u!1 &1445052567
 GameObject:
   m_ObjectHideFlags: 0
@@ -448473,7 +448507,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Size: {x: 1, y: 1, z: 1}
-  IsDrawCollisionNode: 1
+  AwakeGenerateSpace: 1
+  AwakeGenerateGraph: 0
+  IsDrawCollisionNode: 0
   IsDrawEmptyNode: 0
   IsDrawEdge: 0
   _param:
@@ -520806,6 +520842,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   Size: {x: 1, y: 2, z: 1}
+  AwakeGenerateSpace: 1
+  AwakeGenerateGraph: 0
   IsDrawCollisionNode: 0
   IsDrawEmptyNode: 0
   IsDrawEdge: 0
@@ -583598,6 +583636,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2039918567}
+  - component: {fileID: 2039918568}
   m_Layer: 0
   m_Name: Test_0
   m_TagString: Untagged
@@ -583623,6 +583662,21 @@ Transform:
   - {fileID: 1803490594}
   m_Father: {fileID: 291970246}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2039918568
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2039918566}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b5a88adb1f6b4bc7be5b4357f2daad61, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _save: 0
+  _load: 0
+  _generator: {fileID: 368737879}
 --- !u!1 &2039960905
 GameObject:
   m_ObjectHideFlags: 0

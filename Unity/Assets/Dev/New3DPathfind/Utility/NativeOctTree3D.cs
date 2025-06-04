@@ -12,7 +12,6 @@ namespace Candy.Pathfind3D
         [NativeDisableContainerSafetyRestriction]
         private NativeFlattenOctTree* _trees;
         private int3 _size;
-        private Allocator _allocator;
         private int _length;
         
         public NativeFlattenOctTree* Trees => _trees;
@@ -23,15 +22,14 @@ namespace Candy.Pathfind3D
         public Vector3 RootPosition { get; private set; }
         public float TreeScale { get; private set; }
 
-        public NativeOctTree3D(Vector3 rootPosition, float treeScale, OctTree[,,] trees, Vector3Int size, Allocator allocator)
+        public NativeOctTree3D(Vector3 rootPosition, float treeScale, OctTree[,,] trees, Vector3Int size)
         {
             RootPosition = rootPosition;
             TreeScale = treeScale;
-            _allocator = allocator;
             _size = new int3(size.x, size.y, size.z);
             _length = size.x * size.y * size.z;
             long totalSize = _length * sizeof(NativeFlattenOctTree);
-            _trees = (NativeFlattenOctTree*)Unity.Collections.LowLevel.Unsafe.UnsafeUtility.Malloc(totalSize, 16, allocator);
+            _trees = (NativeFlattenOctTree*)Unity.Collections.LowLevel.Unsafe.UnsafeUtility.Malloc(totalSize, 16, Allocator.Persistent);
             
             int idx = 0;
             for (int x = 0; x < size.x; x++)
@@ -87,7 +85,7 @@ namespace Candy.Pathfind3D
         {
             if (_trees != null)
             {
-                Unity.Collections.LowLevel.Unsafe.UnsafeUtility.Free(_trees, _allocator);
+                Unity.Collections.LowLevel.Unsafe.UnsafeUtility.Free(_trees, Allocator.Persistent);
                 _trees = null;
             }
         }
