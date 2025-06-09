@@ -13,6 +13,8 @@ namespace Candy.Pathfind3D
     
     public class MapBakeTest : MonoBehaviour
     {
+        public string fileName;
+        
         public bool _saveTree;
         public bool _loadTree;
         public bool _saveGraph;
@@ -21,7 +23,7 @@ namespace Candy.Pathfind3D
         public OctreeGraphGenerator _generator;
         private void LoadTree(SynchronizationContext mainCtx)
         {
-            var handler = new MapBakeHandler();
+            var handler = new MapBakeHandler("Assets", fileName + "Tree");
             int id = Progress.Start("Load Tree", "Processing nodes", Progress.Options.Managed);
             handler.LoadTree(out NativeOctTree3D tree3d, id);
             
@@ -33,7 +35,7 @@ namespace Candy.Pathfind3D
 
         private void LoadGraph(SynchronizationContext mainCtx)
         {
-            var handler = new MapBakeHandler();
+            var handler = new MapBakeHandler("Assets", fileName + "Graph");
             int id = Progress.Start("Load Graph", "Processing nodes", Progress.Options.Managed);
             handler.LoadGraph(out NativeOctGraph graph, id);
             
@@ -51,7 +53,7 @@ namespace Candy.Pathfind3D
             {
                 _saveTree = false;
 
-                var handler = new MapBakeHandler();
+                var handler = new MapBakeHandler("Assets", fileName + "Tree");
                 handler.BakeTree(_generator.NativeOctTree3D, true);
             }
             if (_loadTree)
@@ -76,7 +78,7 @@ namespace Candy.Pathfind3D
             {
                 _saveGraph = false;
 
-                var handler = new MapBakeHandler();
+                var handler = new MapBakeHandler("Assets", fileName + "Graph");
                 handler.BakeGraph(_generator.NativeOctGraph, true);
             }
 
