@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 using NUnit.Framework;
@@ -115,11 +116,12 @@ namespace Candy.Pathfind3D.Editor
 
         public void LoadTree(out NativeOctTree3D tree3d, int? id)
         {
-            using MemoryMappedFile mmf = MemoryMappedFile.CreateFromFile(Path, FileMode.Open);
-            using MemoryMappedViewStream stream = mmf.CreateViewStream();
+            Stopwatch s = new();
+            s.Start();
+            using FileStream stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
             using BinaryReader reader = new BinaryReader(stream);
 
-            int cpuCoreCount = 32;
+            int cpuCoreCount = 4;
             tree3d = default;
             long seek = 0;
 
@@ -127,7 +129,6 @@ namespace Candy.Pathfind3D.Editor
             {
                 // 기본 정보 복원
                 int treeCount = ReadBinary<int>(reader);
-                Debug.Log(treeCount);
                 seek += sizeof(int);
                 int3 treeSize = ReadBinary<int3>(reader);
                 seek += sizeof(int3);
@@ -169,7 +170,7 @@ namespace Candy.Pathfind3D.Editor
                         Progress.Report(id.Value, i / (float)treeCount, $"Flatten Array {i}");
                     }
                     tree.FlattenArr = new NativeArray<NativeOctNode>(flattenLen, Allocator.Persistent);
-                    BatchReadExecute<NativeOctNode>(cpuCoreCount, flattenLen, ref seek, mmf, (data, index, loopBatch) =>
+                    BatchReadExecute<NativeOctNode>(cpuCoreCount, flattenLen, ref seek, Path, (data, index, loopBatch) =>
                     {
                         tree.FlattenArr[index] = data;
                     });
@@ -180,7 +181,7 @@ namespace Candy.Pathfind3D.Editor
                         Progress.Report(id.Value, i / (float)treeCount, $"Index Array {i}");
                     }
                     tree.IndexArr = new NativeArray<int>(indexLen, Allocator.Persistent);
-                    BatchReadExecute<int>(cpuCoreCount, indexLen, ref seek, mmf, (data, index, loopBatch) =>
+                    BatchReadExecute<int>(cpuCoreCount, indexLen, ref seek, Path, (data, index, loopBatch) =>
                     {
                         tree.IndexArr[index] = data;
                     });
@@ -191,7 +192,7 @@ namespace Candy.Pathfind3D.Editor
                         Progress.Report(id.Value, i / (float)treeCount, $"Tree Array {i}");
                     }
                     tree.TreeArr = new NativeArray<int>(treeLen, Allocator.Persistent);
-                    BatchReadExecute<int>(cpuCoreCount, treeLen, ref seek, mmf, (data, index, loopBatch) =>
+                    BatchReadExecute<int>(cpuCoreCount, treeLen, ref seek, Path, (data, index, loopBatch) =>
                     {
                         tree.TreeArr[index] = data;
                     });
@@ -205,6 +206,9 @@ namespace Candy.Pathfind3D.Editor
                 }
 
                 tree3d = new NativeOctTree3D(rootPosition, treeScale, trees, treeSize, treeCount);
+                
+                s.Stop();
+                Debug.Log(s.ElapsedMilliseconds);
 
                 if (id.HasValue)
                 {
@@ -276,14 +280,15 @@ namespace Candy.Pathfind3D.Editor
 
         public void LoadGraph(out NativeOctGraph graph, int? id)
         {
-            using MemoryMappedFile mmf = MemoryMappedFile.CreateFromFile(Path, FileMode.Open);
-            using MemoryMappedViewStream stream = mmf.CreateViewStream();
-            using BinaryReader reader = new BinaryReader(stream);
+            Stopwatch s = new();
+            s.Start();
+            FileStream stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            BinaryReader reader = new BinaryReader(stream);
             
             graph = default;
 
             long fileIndex = 0;
-            int cpuCoreCount = 32;
+            int cpuCoreCount = 16;
 
             unsafe
             {
@@ -315,6 +320,8 @@ namespace Candy.Pathfind3D.Editor
                     graph.EdgeLen.Add(len);
                     fileIndex += sizeof(int);
                 }
+                
+                stream.DisposeAsync();
 
                 // 3. Edge2Ptr
                 graph.Edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(sizeof(NativeEdge*) * graph.Edge2PtrLength,
@@ -331,17 +338,9 @@ namespace Candy.Pathfind3D.Editor
                         if(tempGraph.EdgeLen[i] >= 0)
                             coverageStart += tempGraph.EdgeLen[i];
                     }
-                    long coverageEnd = 0;
-                    for (int i = start; i < end; i++)
-                    {
-                        if(tempGraph.EdgeLen[i] >= 0)
-                            coverageEnd += tempGraph.EdgeLen[i];
-                    }
-
-                    var accessor = mmf.CreateViewAccessor(fileIndex + coverageStart * sizeof(NativeEdge),
-                        coverageEnd * sizeof(NativeEdge), MemoryMappedFileAccess.Read);
-                    
-                    long cursor = 0;
+                    FileStream st = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    BinaryReader r = new BinaryReader(st);
+                   st.Seek(fileIndex + coverageStart * sizeof(NativeEdge), SeekOrigin.Begin);
                     
                     for (int i = start; i < end; i++)
                     {
@@ -349,28 +348,29 @@ namespace Candy.Pathfind3D.Editor
                         if (len < 0) len = 0;
                         NativeEdge* edgeArray = (NativeEdge*)UnsafeUtility.Malloc(sizeof(NativeEdge) * len,
                             UnsafeUtility.AlignOf<NativeEdge>(), Allocator.Persistent);
-
-                        int f = (int)(cursor / (float)(coverageEnd * sizeof(NativeEdge)) * 100f) ;
-                        if (id.HasValue && (f % 5 == 0 || f == 0))
-                        {
-                            Progress.Report(ids, cursor / (float)(coverageEnd * sizeof(NativeEdge)));
-                        }
                         
                         for (int j = 0; j < len; j++)
                         {
-                            edgeArray[j] = ReadBinaryMMF<NativeEdge>(accessor, ref cursor);
+                            edgeArray[j] = ReadBinary<NativeEdge>(r);
+                        }
+
+                        if (id.HasValue && (i % 1000 == 0 || i - 1 == end))
+                        {
+                            Progress.Report(ids, i - start, end - start);
                         }
 
                         tempGraph.Edge2Ptr[i] = edgeArray;
                     }
                     
                     Progress.Finish(ids, Progress.Status.Succeeded);
-                    
-                    accessor.Dispose();
+                    st.DisposeAsync();
                 });
                 
                 Task.WhenAll(tasks).Wait();
             }
+            
+            s.Stop();
+            Debug.Log(s.ElapsedMilliseconds);
 
             if (id.HasValue)
             {
@@ -398,7 +398,14 @@ namespace Candy.Pathfind3D.Editor
 
                 Task task = Task.Run(() =>
                 {
-                    callback?.Invoke(start, end, iter);
+                    try
+                    {
+                        callback?.Invoke(start, end, iter);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogException(e);
+                    }
                 });
                 tasks.Add(task);
             }
@@ -406,7 +413,7 @@ namespace Candy.Pathfind3D.Editor
             return tasks;
         }
         
-        private static unsafe void BatchReadExecute<T>(int cpuCoreCount, int totalLoopCount, ref long seek, MemoryMappedFile mmf, Action<T, int, int> callback)
+        private static unsafe void BatchReadExecute<T>(int cpuCoreCount, int totalLoopCount, ref long seek, string path, Action<T, int, int> callback)
             where T : unmanaged
         {
             int[] eachCount = new int[cpuCoreCount];
@@ -421,26 +428,27 @@ namespace Candy.Pathfind3D.Editor
             long currentSeek = seek;
             for (int loopBatch = 0; loopBatch < cpuCoreCount; loopBatch++)
             {
+                FileStream st = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                BinaryReader r = new BinaryReader(st);
+                
                 int start = loopBatch == 0 ? 0 : eachCount[loopBatch - 1];
                 int end = eachCount[loopBatch];
 
                 int iter = loopBatch;
                 
-                var accessor = mmf.CreateViewAccessor(currentSeek + start * sizeof(T),
-                    (end - start) * sizeof(T), MemoryMappedFileAccess.Read);
+                //var accessor = mmf.CreateViewAccessor(currentSeek + start * sizeof(T),
+                //    (end - start) * sizeof(T), MemoryMappedFileAccess.Read);
 
+                st.Seek(currentSeek + start * sizeof(T), SeekOrigin.Begin);
+                
                 Task task = Task.Run(() =>
                 {
-                    int id = 0;
-                    long cursor = 0;
-                    
                     for (int i = start; i < end; i++)
                     {
-                        T data = ReadBinaryMMF<T>(accessor, ref cursor);
+                        T data = ReadBinary<T>(r);
                         callback?.Invoke(data, i, iter);
                     }
-                    
-                    accessor.Dispose();
+                    st.DisposeAsync();
                 });
                 tasks.Add(task);
             }
