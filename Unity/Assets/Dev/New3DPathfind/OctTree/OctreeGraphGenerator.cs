@@ -193,7 +193,7 @@ namespace Candy.Pathfind3D
 
         private void DrawNode()
         {
-            Gizmos.DrawWireCube(transform.position + NativeOctTree3D.TreeScale * (Vector3)Size * 0.5f, NativeOctTree3D.TreeScale * (Vector3)Size);
+            Gizmos.DrawWireCube(transform.position + _param.Scale * (Vector3)Size * 0.5f, _param.Scale * (Vector3)Size);
 
             if (IsDrawCollisionNode is false && IsDrawEmptyNode is false) return;
             if (NativeOctTree3D.IsCreated is false) return;

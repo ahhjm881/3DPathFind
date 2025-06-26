@@ -121,10 +121,10 @@ namespace Candy.Pathfind3D.Editor
             using FileStream stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
             using BinaryReader reader = new BinaryReader(stream);
 
-            int cpuCoreCount = 4;
+            int cpuCoreCount = 16;
             tree3d = default;
             long seek = 0;
-
+            
             unsafe
             {
                 // 기본 정보 복원
@@ -225,7 +225,8 @@ namespace Candy.Pathfind3D.Editor
             }
 
             // 파일 스트림 생성
-            using (FileStream stream = new FileStream(Path, FileMode.Create, FileAccess.Write))
+            using (FileStream stream = new FileStream(Path, FileMode.Create, FileAccess.Write, FileShare.Write,
+                       1024 * 1024, FileOptions.WriteThrough | FileOptions.SequentialScan ))
             using (BinaryWriter writer = new BinaryWriter(stream))
             {
                 unsafe
@@ -282,14 +283,15 @@ namespace Candy.Pathfind3D.Editor
         {
             Stopwatch s = new();
             s.Start();
-            FileStream stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            FileStream stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                1024 * 1024, FileOptions.SequentialScan);
             BinaryReader reader = new BinaryReader(stream);
             
             graph = default;
 
             long fileIndex = 0;
             int cpuCoreCount = 16;
-
+            
             unsafe
             {
                 // 1. Edge2PtrLength
@@ -321,7 +323,7 @@ namespace Candy.Pathfind3D.Editor
                     fileIndex += sizeof(int);
                 }
                 
-                stream.DisposeAsync();
+                stream.Dispose();
 
                 // 3. Edge2Ptr
                 graph.Edge2Ptr = (NativeEdge**)UnsafeUtility.Malloc(sizeof(NativeEdge*) * graph.Edge2PtrLength,
@@ -338,7 +340,8 @@ namespace Candy.Pathfind3D.Editor
                         if(tempGraph.EdgeLen[i] >= 0)
                             coverageStart += tempGraph.EdgeLen[i];
                     }
-                    FileStream st = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    FileStream st = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024 * 16, 
+                        FileOptions.SequentialScan);
                     BinaryReader r = new BinaryReader(st);
                    st.Seek(fileIndex + coverageStart * sizeof(NativeEdge), SeekOrigin.Begin);
                     
@@ -363,7 +366,8 @@ namespace Candy.Pathfind3D.Editor
                     }
                     
                     Progress.Finish(ids, Progress.Status.Succeeded);
-                    st.DisposeAsync();
+                    st.Dispose();
+                    r.Dispose();
                 });
                 
                 Task.WhenAll(tasks).Wait();
@@ -428,7 +432,8 @@ namespace Candy.Pathfind3D.Editor
             long currentSeek = seek;
             for (int loopBatch = 0; loopBatch < cpuCoreCount; loopBatch++)
             {
-                FileStream st = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                FileStream st = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024,
+                    FileOptions.SequentialScan);
                 BinaryReader r = new BinaryReader(st);
                 
                 int start = loopBatch == 0 ? 0 : eachCount[loopBatch - 1];
